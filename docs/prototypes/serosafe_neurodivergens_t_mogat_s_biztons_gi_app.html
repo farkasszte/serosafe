@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="hu" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SeroSafe — Pszichiátriai & ADHD Napló és Biztonsági Core</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              400: '#2dd4bf',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            },
+            calm: {
+              bg: '#0f172a',
+              card: '#1e293b',
+              subtle: '#334155',
+              accent: '#38bdf8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scroll & Touch Snap Settings */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .snap-container {
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+    }
+    .snap-page {
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+    }
+    /* Reduced motion class */
+    .reduced-motion *, .reduced-motion *::before, .reduced-motion *::after {
+      animation-duration: 0.001s !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001s !important;
+      scroll-behavior: auto !important;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
+
+  <!-- ================= TOP HEADER ================= -->
+  <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 z-30">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-brand-500/20 border border-brand-400/40 flex items-center justify-center text-brand-400 font-bold text-lg">
+        S
+      </div>
+      <div>
+        <h1 class="font-bold text-base leading-none text-slate-100 tracking-wide">SeroSafe</h1>
+        <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60 inline-block mt-0.5" data-i18n="protoBadge">Prototípus • Nem orvosi tanács</span>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="flex items-center gap-2">
+      <!-- Language Toggle -->
+      <button id="langToggleBtn" onclick="toggleLanguage()" class="px-2 py-1 text-xs font-semibold rounded bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition">
+        HU
+      </button>
+
+      <!-- Reduced Motion Toggle -->
+      <button id="motionToggleBtn" onclick="toggleReducedMotion()" title="Mozgáscsökkentés" class="p-1.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition text-xs">
+        ⚡
+      </button>
+
+      <!-- 112 Crisis Button -->
+      <button onclick="openCrisisModal()" class="px-3 py-1 text-xs font-bold rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/40 border border-rose-400/30 animate-pulse transition">
+        🚨 112 Krízis
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MAIN VIEWPORT (SWIPE PAGES) ================= -->
+  <main id="swipeContainer" class="flex-1 flex overflow-x-auto overflow-y-hidden snap-container no-scrollbar w-full relative">
+
+    <!-- PAGE 1: MA (DIARY) -->
+    <section id="page-0" class="w-full h-full flex-shrink-0 snap-page overflow-y-auto p-4 space-y-4 pb-24">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-xl font-bold text-slate-100" data-i18n="todayTitle">Ma és Naplózás</h2>
+          <p class="text-xs text-slate-400" data-i18n="todaySubtitle">Gyors 1-érintéses visszajelzés a közérzetedről</p>
+        </div>
+        <span id="currentDateDisplay" class="text-xs font-mono bg-slate-800 px-2 py-1 rounded text-slate-300 border border-slate-700">----.--.--</span>
+      </div>
+
+      <!-- Doctor Read-Only Recommendation Card (Reference Only) -->
+      <div id="doctorRecCard" class="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3 text-xs space-y-1.5 shadow-md">
+        <div class="flex items-center justify-between text-indigo-300 font-semibold">
+          <span class="flex items-center gap-1.5">👨‍⚕️ <span data-i18n="docRecTitle">Kezelőorvosi Támogató Megjegyzés</span></span>
+          <span class="text-[10px] bg-indigo-900/60 text-indigo-200 px-1.5 py-0.5 rounded border border-indigo-700/50" data-i18n="docReadOnlyBadge">Csak referencia • Nem ír át adatot</span>
+        </div>
+        <p class="text-slate-300 leading-relaxed" id="docRecText">
+          "Észrevettem a visszatérő <strong class="text-teal-300">Kávé / Koffein</strong> és a csökkent <strong class="text-teal-300">Alvás</strong> összefüggését a délutáni szorongással. Érdemes lehet a koffeint 14:00 előtt tartani. Kiváló haladás!"
+        </p>
+        <div class="text-[10px] text-slate-400 italic" data-i18n="docRecNote">A kezelőorvos nem adagolási utasítást adott, és nem tudja módosítani a naplódat.</div>
+      </div>
+
+      <!-- Day Parts Selector -->
+      <div class="bg-slate-900/80 p-1.5 rounded-xl border border-slate-800 flex gap-1 overflow-x-auto no-scrollbar">
+        <button onclick="setDayPart('morning')" id="partBtn-morning" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition bg-brand-600 text-white shadow" data-i18n="partMorning">🌅 Reggel</button>
+        <button onclick="setDayPart('midday')" id="partBtn-midday" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition text-slate-400 hover:text-slate-200" data-i18n="partMidday">☀️ Dél</button>
+        <button onclick="setDayPart('afternoon')" id="partBtn-afternoon" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition text-slate-400 hover:text-slate-200" data-i18n="partAfternoon">🌤️ Délután</button>
+        <button onclick="setDayPart('evening')" id="partBtn-evening" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition text-slate-400 hover:text-slate-200" data-i18n="partEvening">🌙 Este</button>
+        <button onclick="setDayPart('night')" id="partBtn-night" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition text-slate-400 hover:text-slate-200" data-i18n="partNight">🌌 Éjszaka</button>
+      </div>
+
+      <!-- Custom Bubble Creator Trigger -->
+      <div class="flex justify-between items-center">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="bubblesHeader">Címkék & Buborékok</span>
+        <button onclick="openCustomBubbleModal()" class="px-2.5 py-1 text-xs bg-brand-900/50 hover:bg-brand-800/60 text-brand-300 rounded-lg border border-brand-500/30 flex items-center gap-1 transition">
+          <span>+</span> <span data-i18n="addBubbleBtn">Új buborék / szokás</span>
+        </button>
+      </div>
+
+      <!-- Bubble Groups Container -->
+      <div id="bubbleGroupsContainer" class="space-y-3">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Entry Options: Note & Added Later Flag -->
+      <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1" data-i18n="noteLabel">Egysoros egyszavas megjegyzés (opcionális)</label>
+          <input type="text" id="dailyNoteInput" onchange="saveTodayData()" placeholder="Pl. Hosszú séta a parkban..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-500">
+        </div>
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="addedLaterCheckbox" onchange="saveTodayData()" class="rounded bg-slate-950 border-slate-800 text-brand-500 focus:ring-0">
+            <span class="text-xs text-slate-400" data-i18n="addedLaterLabel">Utólag hozzáadva (visszamenőleges naplózás)</span>
+          </label>
+          <span class="text-[10px] text-slate-500" data-i18n="autoSavedText">Automatikus mentés localDB-be</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 2: GYÓGYSZER (MEDS) -->
+    <section id="page-1" class="w-full h-full flex-shrink-0 snap-page overflow-y-auto p-4 space-y-4 pb-24">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-xl font-bold text-slate-100" data-i18n="medsTitle">Gyógyszeradagolás & Fókusz</h2>
+          <p class="text-xs text-slate-400" data-i18n="medsSubtitle">Saját adagolási napló bűntudat nélkül</p>
+        </div>
+        <button onclick="launchFocusMode()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-xl shadow border border-brand-400/40 flex items-center gap-1.5">
+          <span>🎯</span> <span data-i18n="focusModeBtn">Fókusz Mód</span>
+        </button>
+      </div>
+
+      <!-- Daily Dose Cards -->
+      <div id="medCardsContainer" class="space-y-3">
+        <!-- Rendered via JS -->
+      </div>
+
+      <!-- Skipped Dose Notes (History based) -->
+      <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-2">
+        <h3 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+          <span>📊</span> <span data-i18n="historyNoteTitle">Semleges Adagkimaradási Megjegyzés</span>
+        </h3>
+        <p class="text-xs text-slate-400 leading-relaxed" id="skipHistoryNote">
+          Betöltés a saját előzményeid alapján...
+        </p>
+      </div>
+    </section>
+
+    <!-- PAGE 3: NAPTÁR (CALENDAR) -->
+    <section id="page-2" class="w-full h-full flex-shrink-0 snap-page overflow-y-auto p-4 space-y-4 pb-24">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-xl font-bold text-slate-100" data-i18n="calTitle">Havi Áttekintés</h2>
+          <p class="text-xs text-slate-400" data-i18n="calSubtitle">Folyamatosság bűntudat és piros napok nélkül</p>
+        </div>
+        <button onclick="toggleHidePercentages()" id="togglePctBtn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700">
+          % Elrejtése
+        </button>
+      </div>
+
+      <!-- Calendar Header -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div class="flex justify-between items-center text-xs font-semibold text-slate-400">
+          <span data-i18n="calMonth">2026. November</span>
+          <div class="flex gap-2">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-brand-500"></span> <span data-i18n="calComplete">Kitöltve</span></span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-800 border border-dashed border-slate-600"></span> <span data-i18n="calGap">Szünet (Gap)</span></span>
+          </div>
+        </div>
+
+        <!-- Grid Days of Week -->
+        <div class="grid grid-cols-7 gap-1 text-center text-[11px] text-slate-500 font-bold uppercase">
+          <span>H</span><span>K</span><span>Sze</span><span>Cs</span><span>P</span><span>Szo</span><span>V</span>
+        </div>
+
+        <!-- Grid Dates -->
+        <div id="calendarGrid" class="grid grid-cols-7 gap-1.5">
+          <!-- Dynamically generated -->
+        </div>
+      </div>
+
+      <!-- Day Detail Card -->
+      <div id="calendarDayDetail" class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-xs space-y-2 hidden">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+          <span class="font-bold text-slate-200" id="detailDate">2026.11.18</span>
+          <span class="text-brand-400 font-mono" id="detailPct">85% completness</span>
+        </div>
+        <div id="detailContent" class="space-y-1 text-slate-300">
+          <!-- Rendered -->
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 4: ELEMZÉS (GRAPH & PATTERNS) -->
+    <section id="page-3" class="w-full h-full flex-shrink-0 snap-page overflow-y-auto p-4 space-y-4 pb-24">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-xl font-bold text-slate-100" data-i18n="graphTitle">Haladás & Összeköttetések</h2>
+          <p class="text-xs text-slate-400" data-i18n="graphSubtitle">Mintázatok, döntések és utólagos reakciók</p>
+        </div>
+
+        <!-- Range Selector -->
+        <div class="bg-slate-900 border border-slate-800 p-1 rounded-lg flex gap-1 text-xs">
+          <button onclick="setGraphRange(14)" id="range-14" class="px-2 py-0.5 rounded text-slate-400 hover:text-white">14d</button>
+          <button onclick="setGraphRange(30)" id="range-30" class="px-2 py-0.5 rounded bg-brand-600 text-white font-bold">30d</button>
+          <button onclick="setGraphRange(90)" id="range-90" class="px-2 py-0.5 rounded text-slate-400 hover:text-white">90d</button>
+        </div>
+      </div>
+
+      <!-- Multi-line Canvas Graph -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-3 relative">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-semibold text-slate-300" data-i18n="graphCanvasLabel">Megfigyelési Skála (0 - 100%)</span>
+          <span class="text-[10px] text-slate-500" data-i18n="smoothNote">Hetente simított adatok</span>
+        </div>
+
+        <!-- Canvas -->
+        <div class="w-full h-48 relative">
+          <canvas id="progressCanvas" class="w-full h-full block rounded-lg bg-slate-950/80"></canvas>
+        </div>
+
+        <!-- Dynamic Overlay Toggles (Core Metrics + Custom Bubbles) -->
+        <div>
+          <div class="text-[11px] font-semibold text-slate-400 mb-1.5" data-i18n="graphTogglesLabel">Kiválasztott mutatók és buborékok a grafikonon:</div>
+          <div id="graphTogglesContainer" class="flex flex-wrap gap-1.5">
+            <!-- Dynamically populated toggles -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Chronological Decisions & Reactions Timeline -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
+        <h3 class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+          <span>🧠</span> <span data-i18n="timelineTitle">Döntések & Utólagos Reakciók Idővonala</span>
+        </h3>
+        <p class="text-[11px] text-slate-400" data-i18n="timelineDesc">Hogyan reagált a szervezeted a megjelölt döntésekre és célokra:</p>
+        <div id="timelineContainer" class="space-y-2 pt-1">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- Explainable Pattern Cards -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider" data-i18n="patternsHeader">Feltárt Mintázatok (Magyarázható)</h3>
+          <span class="text-[10px] text-slate-500" data-i18n="minDaysNotice">Min. 14 nap alapján</span>
+        </div>
+        <div id="patternsContainer" class="space-y-2.5">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 5: BIZTONSÁG (SAFETY CORE & DOCTOR SHARE) -->
+    <section id="page-4" class="w-full h-full flex-shrink-0 snap-page overflow-y-auto p-4 space-y-4 pb-24">
+      <div>
+        <h2 class="text-xl font-bold text-slate-100" data-i18n="safetyTitle">Biztonsági Core & Adatkezelés</h2>
+        <p class="text-xs text-slate-400" data-i18n="safetySubtitle">Szerotonerg monitor, vörös zászló jelek és orvosi megosztás</p>
+      </div>
+
+      <!-- Red Flag Symptom Selector -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold text-slate-200 flex items-center gap-1">
+            <span>🚨</span> <span data-i18n="redFlagsTitle">Vörös Zászló Tünetek (Azonnali Szűrés)</span>
+          </h3>
+          <span class="text-[10px] text-rose-400 font-semibold" data-i18n="symptomAlertBadge">2+ tünet = 112 riasztás</span>
+        </div>
+        <div id="redFlagChipsContainer" class="grid grid-cols-2 gap-1.5 text-xs">
+          <!-- Dynamically populated -->
+        </div>
+        <div id="redFlagWarningBanner" class="bg-rose-950/80 border border-rose-500 p-2.5 rounded-xl text-rose-200 text-xs flex items-center justify-between hidden">
+          <span>⚠️ <strong>Figyelem:</strong> Vörös zászló tünetkombináció észlelve!</span>
+          <button onclick="openCrisisModal()" class="px-2 py-1 bg-rose-600 font-bold rounded text-white text-[11px]">Krízis Kártya</button>
+        </div>
+      </div>
+
+      <!-- Curated Serotonergic Washout Monitor -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
+        <h3 class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+          <span>💊</span> <span data-i18n="washoutTitle">Kimosódási (Washout) és Hatóanyag Monitor</span>
+        </h3>
+        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1.5 text-xs">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-amber-400">Fluoxetine (Prozac/Rivotril átfedés)</span>
+            <span class="text-[10px] bg-amber-950 text-amber-300 px-1.5 py-0.5 rounded border border-amber-800">Aktív Kimosódás</span>
+          </div>
+          <p class="text-slate-400 text-[11px]">Szerotonerg felezési idő ablak: <strong class="text-slate-200">23 nap van hátra</strong> a teljes kimosódásig. Új szerotonerg gyógyszer indítása előtt konzultálj orvosoddal.</p>
+        </div>
+      </div>
+
+      <!-- Doctor Share & Export -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-3">
+        <h3 class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+          <span>👨‍⚕️</span> <span data-i18n="docShareTitle">Időkorlátos Orvosi Hozzáférés (Read-Only)</span>
+        </h3>
+        <p class="text-xs text-slate-400 leading-relaxed" data-i18n="docShareDesc">
+          Generálj biztonságos, kizárólag olvasható hivatkozást a vizitedre. Az orvos nem tudja módosítani a naplódat, de megtekintheti a mintázatokat és referenciaként támogató jegyzetet hagyhat.
+        </p>
+
+        <div class="flex gap-2">
+          <button onclick="generateDoctorLink()" class="flex-1 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-xl transition shadow">
+            🔗 Link & QR Generálása (24 óra)
+          </button>
+          <button onclick="generateLockscreenWallpaper()" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-xl border border-slate-700 font-medium">
+            🖼️ Háttérkép Export
+          </button>
+        </div>
+
+        <div id="doctorShareOutput" class="hidden p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs space-y-1 font-mono text-brand-300 break-all">
+          <!-- Dynamic output -->
+        </div>
+      </div>
+
+      <!-- Offline Backup & Data Control -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
+        <h3 class="text-xs font-bold text-slate-200" data-i18n="dataControlTitle">Adatvédelem & Offline Biztonság</h3>
+        <p class="text-[11px] text-slate-400" data-i18n="dataControlDesc">Minden adatod kizárólag a telefonodon tárolódik titkosított localDB-ben.</p>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="exportDataJSON()" class="py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700">
+            💾 JSON Mentés
+          </button>
+          <button onclick="exportDataCSV()" class="py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700">
+            📊 CSV Export
+          </button>
+        </div>
+        <button onclick="deleteAllData()" class="w-full mt-1 py-1.5 bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-xs font-semibold rounded-lg border border-rose-800/60">
+          🗑️ Összes Adat Törlése (Reset)
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= FIXED BOTTOM NAVIGATION ================= -->
+  <nav class="bg-slate-900/95 backdrop-blur border-t border-slate-800 fixed bottom-0 left-0 right-0 z-30 px-2 py-2">
+    <div class="max-w-md mx-auto flex justify-around items-center">
+      <button onclick="navigateToPage(0)" id="nav-btn-0" class="flex flex-col items-center gap-0.5 text-brand-400">
+        <span class="text-lg">📖</span>
+        <span class="text-[10px] font-medium" data-i18n="navMa">Ma</span>
+      </button>
+      <button onclick="navigateToPage(1)" id="nav-btn-1" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-200">
+        <span class="text-lg">💊</span>
+        <span class="text-[10px] font-medium" data-i18n="navGyogyszer">Gyógyszer</span>
+      </button>
+      <button onclick="navigateToPage(2)" id="nav-btn-2" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-200">
+        <span class="text-lg">📅</span>
+        <span class="text-[10px] font-medium" data-i18n="navNaptar">Naptár</span>
+      </button>
+      <button onclick="navigateToPage(3)" id="nav-btn-3" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-200">
+        <span class="text-lg">📊</span>
+        <span class="text-[10px] font-medium" data-i18n="navElemzes">Elemzés</span>
+      </button>
+      <button onclick="navigateToPage(4)" id="nav-btn-4" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-200">
+        <span class="text-lg">🛡️</span>
+        <span class="text-[10px] font-medium" data-i18n="navBiztonsag">Biztonság</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ================= MODALS & OVERLAYS ================= -->
+
+  <!-- 1. CUSTOM BUBBLE MODAL -->
+  <div id="customBubbleModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-4 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="text-sm font-bold text-slate-100" data-i18n="newBubbleModalTitle">Új Buborék / Szokás Hozzáadása</h3>
+        <button onclick="closeCustomBubbleModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1" data-i18n="bubbleLabelTitle">Buborék Neve (pl. Meditáció, Koffein...)</label>
+          <input type="text" id="newBubbleLabel" placeholder="Pl. Éjszakai tanulás" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500">
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1" data-i18n="bubbleGroupTitle">Kategória (Csoport)</label>
+          <select id="newBubbleGroup" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            <option value="Activity">Tevékenység (Activity)</option>
+            <option value="Mood">Hangulat (Mood)</option>
+            <option value="Energy">Energia (Energy)</option>
+            <option value="Cognitive">Kognitív (Cognitive)</option>
+            <option value="Social">Társas (Social)</option>
+            <option value="Body">Testi (Body)</option>
+            <option value="Substances">Anyagok / Koffein (Substances)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1" data-i18n="intentTypeTitle">Szándék / Típus (Intent Tag)</label>
+          <select id="newBubbleIntent" onchange="toggleCustomIntentInput(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100">
+            <option value="Döntés">Döntés (Decision)</option>
+            <option value="Szükséges cél">Szükséges cél (Necessary Objective)</option>
+            <option value="Megfigyelés" selected>Megfigyelés (Observation)</option>
+            <option value="CUSTOM">-- Egyedi szándék megadása --</option>
+          </select>
+          <input type="text" id="customIntentInput" placeholder="Írd be az egyedi típust..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 mt-1 hidden">
+        </div>
+
+        <label class="flex items-center gap-2 cursor-pointer pt-1">
+          <input type="checkbox" id="newBubbleGraphToggle" checked class="rounded bg-slate-950 border-slate-800 text-brand-500">
+          <span class="text-slate-300" data-i18n="showOnGraphOption">Azonnal jelenjen meg az Elemzés grafikonon</span>
+        </label>
+      </div>
+
+      <div class="flex gap-2 pt-2 border-t border-slate-800">
+        <button onclick="closeCustomBubbleModal()" class="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl font-medium text-xs">Mégse</button>
+        <button onclick="saveCustomBubble()" class="flex-1 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl text-xs">Mentés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MEDS FOCUS MODE MODAL -->
+  <div id="focusModeModal" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-sm bg-slate-900 border border-brand-500/30 rounded-3xl p-6 text-center space-y-6 shadow-2xl relative">
+      <button onclick="closeFocusMode()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-sm">✕</button>
+      <div class="space-y-1">
+        <span class="text-xs uppercase tracking-widest text-brand-400 font-semibold" data-i18n="focusModeHeader">FÓKUSZ MÓD • EGYETLEN ADAG</span>
+        <h3 class="text-2xl font-bold text-slate-100" id="focusMedName">Sertraline 50 mg</h3>
+        <p class="text-xs text-slate-400" id="focusMedSchedule">Tervezett idő: 08:00 (Reggel)</p>
+      </div>
+
+      <div class="space-y-2.5">
+        <button onclick="logFocusAnswer('TOOK')" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-2xl shadow-lg transition">
+          ✓ Bevettem (Took it)
+        </button>
+        <button onclick="logFocusAnswer('LATER')" class="w-full py-3.5 bg-amber-600/80 hover:bg-amber-500 text-white font-bold text-sm rounded-2xl shadow-lg transition">
+          ⏳ Később (Later)
+        </button>
+        <button onclick="logFocusAnswer('SKIPPED')" class="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm rounded-2xl border border-slate-700 transition">
+          ✕ Kihagytam (Skipped)
+        </button>
+      </div>
+
+      <p class="text-[11px] text-slate-500 leading-tight" data-i18n="focusModeDisclaimer">Bűntudat nélkül: a válaszod kizárólag a saját statisztikáidat és biztonsági ablakodat frissíti.</p>
+    </div>
+  </div>
+
+  <!-- 3. OFFLINE CRISIS CARD OVERLAY -->
+  <div id="crisisModal" class="fixed inset-0 bg-slate-950 z-50 overflow-y-auto p-4 space-y-4 hidden">
+    <div class="max-w-md mx-auto space-y-4 pb-12">
+      <!-- Top Bar -->
+      <div class="flex justify-between items-center border-b border-rose-900/50 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🚨</span>
+          <div>
+            <h2 class="text-lg font-bold text-rose-400 leading-none">OFFLINE KRÍZIS KÁRTYA</h2>
+            <span class="text-[10px] text-slate-400">Mentősöknek & Sürgősségi Ellátóknak</span>
+          </div>
+        </div>
+        <button onclick="closeCrisisModal()" class="px-3 py-1 bg-slate-800 text-slate-300 text-xs rounded-lg border border-slate-700">Bezárás</button>
+      </div>
+
+      <!-- TTS Read Aloud Button -->
+      <button onclick="speakCrisisSummary()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-brand-300 font-semibold text-xs rounded-xl border border-brand-500/30 flex items-center justify-center gap-2 shadow">
+        🔊 Felolvasás Mentősöknek (Text-To-Speech)
+      </button>
+
+      <!-- Section 1: Communication Barrier -->
+      <div class="bg-rose-950/40 border-2 border-rose-600/60 rounded-2xl p-4 space-y-1">
+        <span class="text-[10px] font-bold text-rose-400 uppercase tracking-wider">1. Kommunikációs Korlát & Állapot</span>
+        <p class="text-sm font-semibold text-slate-100" id="crisisBarrierText">
+          "A beteg intenzív szorongás / krízis alatt leblokkolhat és nem tud szóban válaszolni. Kérjük, olvasd el a lenti gyógyszerlistát."
+        </p>
+      </div>
+
+      <!-- Section 2: Active Meds & Washout -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Rendszeres Gyógyszerek & Utolsó Adag</span>
+        <div id="crisisMedsList" class="space-y-1.5 text-xs">
+          <!-- Rendered -->
+        </div>
+      </div>
+
+      <!-- Section 3: Red Flags -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Nemrégiben Logolt Vörös Zászló Tünetek</span>
+        <div id="crisisRedFlagsList" class="text-xs text-slate-300">
+          Nincs aktív vörös zászló tünet kiválasztva.
+        </div>
+      </div>
+
+      <!-- Call 112 Button -->
+      <a href="tel:112" class="block w-full py-4 bg-rose-600 hover:bg-rose-500 text-white text-center font-black text-lg rounded-2xl shadow-xl shadow-rose-950 border border-rose-400/40">
+        📞 MENTŐK HÍVÁSA: 112
+      </a>
+
+      <p class="text-[10px] text-slate-500 text-center leading-tight">
+        Nyilatkozat: A kártyát a felhasználó saját naplója generálta offline. Nem minősül orvosi diagnózisnak.
+      </p>
+    </div>
+  </div>
+
+  <!-- Hidden Lock-Screen Canvas -->
+  <canvas id="lockscreenCanvas" width="1080" height="1920" class="hidden"></canvas>
+
+
+  <!-- ================= APPLICATION LOGIC (SINGLE-FILE JS) ================= -->
+  <script>
+    // --- 1. STATE & DICTIONARIES ---
+    const STORAGE_KEY = 'SEROSAFE_V4_STATE';
+
+    const I18N = {
+      hu: {
+        protoBadge: "Prototípus • Nem orvosi tanács",
+        todayTitle: "Ma és Naplózás",
+        todaySubtitle: "Gyors 1-érintéses visszajelzés a közérzetedről",
+        docRecTitle: "Kezelőorvosi Támogató Megjegyzés",
+        docReadOnlyBadge: "Csak referencia • Nem ír át adatot",
+        docRecNote: "A kezelőorvos nem adagolási utasítást adott, és nem tudja módosítani a naplódat.",
+        partMorning: "🌅 Reggel",
+        partMidday: "☀️ Dél",
+        partAfternoon: "🌤️ Délután",
+        partEvening: "🌙 Este",
+        partNight: "🌌 Éjszaka",
+        bubblesHeader: "Címkék & Buborékok",
+        addBubbleBtn: "Új buborék / szokás",
+        noteLabel: "Egysoros egyszavas megjegyzés (opcionális)",
+        addedLaterLabel: "Utólag hozzáadva (visszamenőleges naplózás)",
+        autoSavedText: "Automatikus mentés localDB-be",
+        medsTitle: "Gyógyszeradagolás & Fókusz",
+        medsSubtitle: "Saját adagolási napló bűntudat nélkül",
+        focusModeBtn: "Fókusz Mód",
+        historyNoteTitle: "Semleges Adagkimaradási Megjegyzés",
+        calTitle: "Havi Áttekintés",
+        calSubtitle: "Folyamatosság bűntudat és piros napok nélkül",
+        calMonth: "2026. November",
+        calComplete: "Kitöltve",
+        calGap: "Szünet (Gap)",
+        graphTitle: "Haladás & Összeköttetések",
+        graphSubtitle: "Mintázatok, döntések és utólagos reakciók",
+        graphCanvasLabel: "Megfigyelési Skála (0 - 100%)",
+        smoothNote: "Hetente simított adatok",
+        graphTogglesLabel: "Kiválasztott mutatók és buborékok a grafikonon:",
+        timelineTitle: "Döntések & Utólagos Reakciók Idővonala",
+        timelineDesc: "Hogyan reagált a szervezeted a megjelölt döntésekre és célokra:",
+        patternsHeader: "Feltárt Mintázatok (Magyarázható)",
+        minDaysNotice: "Min. 14 nap alapján",
+        safetyTitle: "Biztonsági Core & Adatkezelés",
+        safetySubtitle: "Szerotonerg monitor, vörös zászló jelek és orvosi megosztás",
+        redFlagsTitle: "Vörös Zászló Tünetek (Azonnali Szűrés)",
+        symptomAlertBadge: "2+ tünet = 112 riasztás",
+        washoutTitle: "Kimosódási (Washout) és Hatóanyag Monitor",
+        docShareTitle: "Időkorlátos Orvosi Hozzáférés (Read-Only)",
+        docShareDesc: "Generálj biztonságos, kizárólag olvasható hivatkozást a vizitedre. Az orvos nem tudja módosítani a naplódat.",
+        dataControlTitle: "Adatvédelem & Offline Biztonság",
+        dataControlDesc: "Minden adatod kizárólag a telefonodon tárolódik titkosított localDB-ben.",
+        navMa: "Ma",
+        navGyogyszer: "Gyógyszer",
+        navNaptar: "Naptár",
+        navElemzes: "Elemzés",
+        navBiztonsag: "Biztonság",
+        newBubbleModalTitle: "Új Buborék / Szokás Hozzáadása",
+        bubbleLabelTitle: "Buborék Neve (pl. Meditáció, Koffein...)",
+        bubbleGroupTitle: "Kategória (Csoport)",
+        intentTypeTitle: "Szándék / Típus (Intent Tag)",
+        showOnGraphOption: "Azonnal jelenjen meg az Elemzés grafikonon",
+        focusModeHeader: "FÓKUSZ MÓD • EGYETLEN ADAG",
+        focusModeDisclaimer: "Bűntudat nélkül: a válaszod kizárólag a saját statisztikáidat frissíti."
+      },
+      en: {
+        protoBadge: "Prototype • Not medical advice",
+        todayTitle: "Today & Logging",
+        todaySubtitle: "Quick 1-tap feedback about your state",
+        docRecTitle: "Doctor Reference Recommendation",
+        docReadOnlyBadge: "Reference only • Cannot edit data",
+        docRecNote: "The doctor did not provide dose advice and cannot alter your diary entries.",
+        partMorning: "🌅 Morning",
+        partMidday: "☀️ Midday",
+        partAfternoon: "🌤️ Afternoon",
+        partEvening: "🌙 Evening",
+        partNight: "🌌 Night",
+        bubblesHeader: "Chips & Bubbles",
+        addBubbleBtn: "New bubble / habit",
+        noteLabel: "One-line optional note",
+        addedLaterLabel: "Added later (retrospective log)",
+        autoSavedText: "Auto-saved to localDB",
+        medsTitle: "Medication & Focus",
+        medsSubtitle: "Personal log without guilt",
+        focusModeBtn: "Focus Mode",
+        historyNoteTitle: "Neutral Skipped-Dose Note",
+        calTitle: "Monthly Overview",
+        calSubtitle: "Consistency without guilt or red failure days",
+        calMonth: "November 2026",
+        calComplete: "Completed",
+        calGap: "Gap",
+        graphTitle: "Progress & Connections",
+        graphSubtitle: "Patterns, decisions and subsequent reactions",
+        graphCanvasLabel: "Observation Scale (0 - 100%)",
+        smoothNote: "Weekly smoothed data",
+        graphTogglesLabel: "Selected metrics & bubbles on graph:",
+        timelineTitle: "Decisions & Reactions Timeline",
+        timelineDesc: "How your body reacted to tagged decisions and objectives:",
+        patternsHeader: "Uncovered Patterns (Explainable)",
+        minDaysNotice: "Based on min 14 days",
+        safetyTitle: "Safety Core & Data Control",
+        safetySubtitle: "Serotonergic monitor, red flags & doctor share",
+        redFlagsTitle: "Red-Flag Symptoms (Immediate Filter)",
+        symptomAlertBadge: "2+ symptoms = 112 trigger",
+        washoutTitle: "Washout & Substance Monitor",
+        docShareTitle: "Time-Limited Doctor Access (Read-Only)",
+        docShareDesc: "Generate a secure read-only link for your visit. The doctor cannot edit your entries.",
+        dataControlTitle: "Privacy & Offline Safety",
+        dataControlDesc: "All data stays exclusively on your phone in local encrypted storage.",
+        navMa: "Today",
+        navGyogyszer: "Meds",
+        navNaptar: "Calendar",
+        navElemzes: "Insights",
+        navBiztonsag: "Safety",
+        newBubbleModalTitle: "Add New Bubble / Habit",
+        bubbleLabelTitle: "Bubble Name (e.g. Meditation, Caffeine...)",
+        bubbleGroupTitle: "Category (Group)",
+        intentTypeTitle: "Intent / Type Tag",
+        showOnGraphOption: "Show on Insights Graph immediately",
+        focusModeHeader: "FOCUS MODE • SINGLE DOSE",
+        focusModeDisclaimer: "No guilt: your response only updates your personal insights."
+      }
+    };
+
+    // Default Application State
+    let appState = {
+      lang: 'hu',
+      reducedMotion: false,
+      activePage: 0,
+      activeDayPart: 'morning',
+      hidePercentages: false,
+      graphRange: 30,
+      
+      // Selected graph overlay keys
+      activeGraphOverlays: ['energy', 'meds', 'Kávé / Koffein', 'Munka / fókusz'],
+
+      // Custom / Default Bubbles
+      bubbles: [
+        { id: 'b1', group: 'Activity', label: 'Séta az erdőben', intent: 'Döntés', icon: '🌲', onGraph: true },
+        { id: 'b2', group: 'Activity', label: 'Munka / fókusz', intent: 'Szükséges cél', icon: '💻', onGraph: true },
+        { id: 'b3', group: 'Mood', label: 'Nyugodt', intent: 'Megfigyelés', icon: '😌', onGraph: false },
+        { id: 'b4', group: 'Mood', label: 'Szorongó', intent: 'Megfigyelés', icon: '😟', onGraph: true },
+        { id: 'b5', group: 'Energy', label: 'Magas energia', intent: 'Megfigyelés', icon: '⚡', onGraph: false },
+        { id: 'b6', group: 'Energy', label: 'Alacsony energia', intent: 'Megfigyelés', icon: '🪫', onGraph: true },
+        { id: 'b7', group: 'Cognitive', label: 'Agyi köd (Mental fog)', intent: 'Megfigyelés', icon: '🌫️', onGraph: true },
+        { id: 'b8', group: 'Substances', label: 'Kávé / Koffein', intent: 'Döntés', icon: '☕', onGraph: true },
+        { id: 'b9', group: 'Substances', label: 'Stimuláns bevétele', intent: 'Szükséges cél', icon: '💊', onGraph: true },
+        { id: 'b10', group: 'Sleep', label: 'Jó alvás (>7 óra)', intent: 'Megfigyelés', icon: '🛌', onGraph: true }
+      ],
+
+      // Today's Selections
+      today: {
+        date: '2026-11-18',
+        selectedBubbleIds: ['b2', 'b8', 'b9'],
+        note: '',
+        addedLater: false
+      },
+
+      // Daily Meds
+      meds: [
+        { id: 'm1', name: 'Sertraline', dose: '50 mg', schedule: '08:00 (Reggel)', status: 'TOOK', withdrawalCaution: true },
+        { id: 'm2', name: 'Methylphenidate', dose: '18 mg', schedule: '08:30 (Reggel)', status: 'TOOK', withdrawalCaution: false },
+        { id: 'm3', name: 'Melatonin', dose: '3 mg', schedule: '22:00 (Este)', status: 'LATER', withdrawalCaution: false }
+      ],
+
+      // Red Flags Selected
+      redFlags: [],
+
+      // Patterns User Feedback
+      patternStatus: {
+        p1: 'kept',
+        p2: 'kept'
+      },
+
+      // 90-Day Simulated Dataset
+      daysData: []
+    };
+
+    // --- 2. INITIALIZATION & STORAGE ---
+    window.onload = function() {
+      loadStateFromStorage();
+      generate90DayHistoryIfNeeded();
+      updateDateDisplays();
+      applyLanguageUI();
+      renderAll();
+
+      // Horizontal Scroll Snap Synchronization
+      const swipeContainer = document.getElementById('swipeContainer');
+      swipeContainer.addEventListener('scroll', handleSwipeScroll);
+
+      // Canvas Responsive Resize
+      window.addEventListener('resize', renderProgressCanvas);
+    };
+
+    function loadStateFromStorage() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          appState = { ...appState, ...parsed };
+        }
+      } catch (e) {
+        console.warn('LocalStorage error:', e);
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
+      }
+    }
+
+    function generate90DayHistoryIfNeeded() {
+      if (appState.daysData && appState.daysData.length === 90) return;
+
+      const list = [];
+      const now = new Date(2026, 10, 18); // Nov 18, 2026
+
+      for (let i = 89; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+
+        // Create realistic gaps (e.g. 15% missing logging days)
+        const isGap = (i % 7 === 3 && i > 10);
+        
+        const energy = isGap ? null : Math.min(100, Math.max(20, Math.floor(50 + Math.sin(i * 0.3) * 30 + (Math.random() * 20 - 10))));
+        const mood = isGap ? null : Math.min(100, Math.max(30, Math.floor(60 + Math.cos(i * 0.25) * 25 + (Math.random() * 16 - 8))));
+        const medsPct = isGap ? null : (i % 5 === 0 ? 66 : 100);
+
+        // Active bubbles array for this historical day
+        const activeBubbles = [];
+        if (!isGap) {
+          if (energy > 60) activeBubbles.push('Magas energia', 'Munka / fókusz');
+          if (energy < 40) activeBubbles.push('Alacsony energia', 'Agyi köd (Mental fog)');
+          if (i % 2 === 0) activeBubbles.push('Kávé / Koffein', 'Stimuláns bevétele');
+          if (i % 4 === 0) activeBubbles.push('Séta az erdőben');
+        }
+
+        list.push({
+          date: dateStr,
+          isGap,
+          completeness: isGap ? 0 : Math.floor(70 + Math.random() * 30),
+          energy,
+          mood,
+          medsPct,
+          activeBubbles,
+          decisionLogged: (i % 4 === 0) ? 'Kávé / Koffein' : null,
+          reactionObserved: (i % 4 === 0) ? (energy < 45 ? 'Délutáni szorongás & csökkent energia' : 'Fókuszált munkavégzés') : null
+        });
+      }
+
+      appState.daysData = list;
+      saveState();
+    }
+
+    // --- 3. UI NAVIGATION & SWIPE ---
+    function navigateToPage(index) {
+      appState.activePage = index;
+      const swipeContainer = document.getElementById('swipeContainer');
+      const targetPage = document.getElementById(`page-${index}`);
+      if (targetPage) {
+        swipeContainer.scrollTo({
+          left: targetPage.offsetLeft,
+          behavior: appState.reducedMotion ? 'auto' : 'smooth'
+        });
+      }
+      updateNavButtons();
+    }
+
+    function handleSwipeScroll() {
+      const swipeContainer = document.getElementById('swipeContainer');
+      const width = swipeContainer.clientWidth;
+      const pageIndex = Math.round(swipeContainer.scrollLeft / width);
+      if (pageIndex !== appState.activePage && pageIndex >= 0 && pageIndex <= 4) {
+        appState.activePage = pageIndex;
+        updateNavButtons();
+      }
+    }
+
+    function updateNavButtons() {
+      for (let i = 0; i <= 4; i++) {
+        const btn = document.getElementById(`nav-btn-${i}`);
+        if (!btn) continue;
+        if (i === appState.activePage) {
+          btn.className = "flex flex-col items-center gap-0.5 text-brand-400 font-bold";
+        } else {
+          btn.className = "flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-200 font-medium";
+        }
+      }
+    }
+
+    function toggleLanguage() {
+      appState.lang = (appState.lang === 'hu') ? 'en' : 'hu';
+      document.getElementById('langToggleBtn').innerText = appState.lang.toUpperCase();
+      applyLanguageUI();
+      saveState();
+      renderAll();
+    }
+
+    function applyLanguageUI() {
+      const dict = I18N[appState.lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key]) {
+          el.innerText = dict[key];
+        }
+      });
+    }
+
+    function toggleReducedMotion() {
+      appState.reducedMotion = !appState.reducedMotion;
+      if (appState.reducedMotion) {
+        document.body.classList.add('reduced-motion');
+        document.getElementById('motionToggleBtn').classList.add('bg-brand-600', 'text-white');
+      } else {
+        document.body.classList.remove('reduced-motion');
+        document.getElementById('motionToggleBtn').classList.remove('bg-brand-600', 'text-white');
+      }
+      saveState();
+    }
+
+    function updateDateDisplays() {
+      const d = document.getElementById('currentDateDisplay');
+      if (d) d.innerText = appState.today.date;
+    }
+
+    // --- 4. RENDERERS ---
+    function renderAll() {
+      renderBubbles();
+      renderMeds();
+      renderCalendar();
+      renderProgressCanvas();
+      renderGraphToggles();
+      renderTimeline();
+      renderPatterns();
+      renderRedFlags();
+      renderCrisisMeds();
+    }
+
+    // --- PAGE 1: MA (DIARY) ---
+    function setDayPart(part) {
+      appState.activeDayPart = part;
+      ['morning', 'midday', 'afternoon', 'evening', 'night'].forEach(p => {
+        const btn = document.getElementById(`partBtn-${p}`);
+        if (!btn) return;
+        if (p === part) {
+          btn.className = "flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition bg-brand-600 text-white shadow font-bold";
+        } else {
+          btn.className = "flex-1 py-1.5 px-3 rounded-lg text-xs font-medium whitespace-nowrap transition text-slate-400 hover:text-slate-200";
+        }
+      });
+      renderBubbles();
+    }
+
+    function renderBubbles() {
+      const container = document.getElementById('bubbleGroupsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      // Filter sleep category for morning only
+      let visibleBubbles = appState.bubbles;
+      if (appState.activeDayPart !== 'morning') {
+        visibleBubbles = visibleBubbles.filter(b => b.group !== 'Sleep');
+      }
+
+      // Group by category
+      const groups = {};
+      visibleBubbles.forEach(b => {
+        if (!groups[b.group]) groups[b.group] = [];
+        groups[b.group].push(b);
+      });
+
+      Object.keys(groups).forEach(groupKey => {
+        const groupEl = document.createElement('div');
+        groupEl.className = "bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 space-y-2";
+        
+        const titleEl = document.createElement('div');
+        titleEl.className = "text-[11px] font-bold text-slate-400 uppercase tracking-wider flex justify-between items-center";
+        titleEl.innerHTML = `<span>${groupKey}</span>`;
+        groupEl.appendChild(titleEl);
+
+        const chipsWrap = document.createElement('div');
+        chipsWrap.className = "flex flex-wrap gap-1.5";
+
+        groups[groupKey].forEach(b => {
+          const isSelected = appState.today.selectedBubbleIds.includes(b.id);
+          const chipBtn = document.createElement('button');
+          chipBtn.onclick = () => toggleBubble(b.id);
+
+          let intentBadgeClass = "bg-slate-800 text-slate-400";
+          if (b.intent === 'Döntés') intentBadgeClass = "bg-sky-950 text-sky-300 border border-sky-800";
+          else if (b.intent === 'Szükséges cél') intentBadgeClass = "bg-amber-950 text-amber-300 border border-amber-800";
+          else if (b.intent === 'Megfigyelés') intentBadgeClass = "bg-teal-950 text-teal-300 border border-teal-800";
+
+          if (isSelected) {
+            chipBtn.className = "px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-600 text-white shadow-md border border-brand-400/50 flex items-center gap-1.5 transition";
+          } else {
+            chipBtn.className = "px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 flex items-center gap-1.5 transition";
+          }
+
+          chipBtn.innerHTML = `
+            <span>${b.icon || '🏷️'}</span>
+            <span>${b.label}</span>
+            <span class="text-[9px] px-1 py-0.2 rounded ${intentBadgeClass}">${b.intent}</span>
+          `;
+          chipsWrap.appendChild(chipBtn);
+        });
+
+        groupEl.appendChild(chipsWrap);
+        container.appendChild(groupEl);
+      });
+    }
+
+    function toggleBubble(id) {
+      const idx = appState.today.selectedBubbleIds.indexOf(id);
+      if (idx > -1) {
+        appState.today.selectedBubbleIds.splice(idx, 1);
+      } else {
+        appState.today.selectedBubbleIds.push(id);
+      }
+      saveState();
+      renderBubbles();
+      renderTimeline();
+      renderProgressCanvas();
+    }
+
+    function saveTodayData() {
+      const noteInput = document.getElementById('dailyNoteInput');
+      const addedLaterCb = document.getElementById('addedLaterCheckbox');
+      if (noteInput) appState.today.note = noteInput.value;
+      if (addedLaterCb) appState.today.addedLater = addedLaterCb.checked;
+      saveState();
+    }
+
+    // Modal Custom Bubble
+    function openCustomBubbleModal() {
+      document.getElementById('customBubbleModal').classList.remove('hidden');
+    }
+    function closeCustomBubbleModal() {
+      document.getElementById('customBubbleModal').classList.add('hidden');
+    }
+    function toggleCustomIntentInput(val) {
+      const inp = document.getElementById('customIntentInput');
+      if (val === 'CUSTOM') inp.classList.remove('hidden');
+      else inp.classList.add('hidden');
+    }
+
+    function saveCustomBubble() {
+      const label = document.getElementById('newBubbleLabel').value.trim();
+      const group = document.getElementById('newBubbleGroup').value;
+      let intent = document.getElementById('newBubbleIntent').value;
+      if (intent === 'CUSTOM') {
+        intent = document.getElementById('customIntentInput').value.trim() || 'Egyedi';
+      }
+      const onGraph = document.getElementById('newBubbleGraphToggle').checked;
+
+      if (!label) return;
+
+      const newB = {
+        id: 'b_' + Date.now(),
+        group,
+        label,
+        intent,
+        icon: '✨',
+        onGraph
+      };
+
+      appState.bubbles.push(newB);
+      appState.today.selectedBubbleIds.push(newB.id);
+
+      if (onGraph && !appState.activeGraphOverlays.includes(label)) {
+        appState.activeGraphOverlays.push(label);
+      }
+
+      saveState();
+      closeCustomBubbleModal();
+      document.getElementById('newBubbleLabel').value = '';
+      renderAll();
+    }
+
+    // --- PAGE 2: GYÓGYSZER (MEDS) ---
+    function renderMeds() {
+      const container = document.getElementById('medCardsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      appState.meds.forEach((med, idx) => {
+        const card = document.createElement('div');
+        card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3";
+
+        let statusBadge = `<span class="px-2 py-0.5 text-[10px] bg-slate-800 text-slate-400 rounded font-bold">Nincs válaszolva</span>`;
+        if (med.status === 'TOOK') statusBadge = `<span class="px-2 py-0.5 text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 rounded font-bold">✓ Bevettem</span>`;
+        if (med.status === 'LATER') statusBadge = `<span class="px-2 py-0.5 text-[10px] bg-amber-950 text-amber-300 border border-amber-800 rounded font-bold">⏳ Később</span>`;
+        if (med.status === 'SKIPPED') statusBadge = `<span class="px-2 py-0.5 text-[10px] bg-slate-800 text-slate-300 rounded font-bold">✕ Kihagytam</span>`;
+
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="font-bold text-slate-100 text-sm">${med.name} <span class="text-brand-400 font-mono text-xs">${med.dose}</span></h3>
+              <span class="text-[11px] text-slate-400">${med.schedule}</span>
+            </div>
+            ${statusBadge}
+          </div>
+
+          <div class="grid grid-cols-3 gap-1.5">
+            <button onclick="setMedStatus(${idx}, 'TOOK')" class="py-2 text-xs font-semibold rounded-xl ${med.status === 'TOOK' ? 'bg-emerald-600 text-white' : 'bg-slate-950 text-slate-300 border border-slate-800 hover:bg-slate-800'} transition">
+              ✓ Bevettem
+            </button>
+            <button onclick="setMedStatus(${idx}, 'LATER')" class="py-2 text-xs font-semibold rounded-xl ${med.status === 'LATER' ? 'bg-amber-600 text-white' : 'bg-slate-950 text-slate-300 border border-slate-800 hover:bg-slate-800'} transition">
+              ⏳ Később
+            </button>
+            <button onclick="setMedStatus(${idx}, 'SKIPPED')" class="py-2 text-xs font-semibold rounded-xl ${med.status === 'SKIPPED' ? 'bg-slate-800 text-slate-200' : 'bg-slate-950 text-slate-400 border border-slate-800 hover:bg-slate-800'} transition">
+              ✕ Kihagytam
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      // Update history skip note text based on history
+      const skipNoteEl = document.getElementById('skipHistoryNote');
+      if (skipNoteEl) {
+        const sertralineMed = appState.meds.find(m => m.name === 'Sertraline');
+        if (sertralineMed && sertralineMed.status === 'SKIPPED') {
+          skipNoteEl.innerHTML = `
+            <strong class="text-amber-300">Saját előzmény (Sertraline):</strong> A korábbi 4 kihagyott napodon alacsonyabb energiát és fokozott nyugtalanságot regisztráltál.<br>
+            <span class="text-[10px] text-rose-300 mt-1 block">⚠️ <em>Figyelmeztetés:</em> Ne hagyd abba hirtelen az SSRI szedését. Konzultálj a kezelőorvosoddal!</span>
+          `;
+        } else {
+          skipNoteEl.innerText = "Az eddi naplózott előzményeid alapján a gyógyszerbevételeid stabilak. Nincs kimutatott negatív adagkimaradási mintázat.";
+        }
+      }
+    }
+
+    function setMedStatus(index, status) {
+      appState.meds[index].status = status;
+
+      // Live update today's adherence pct in dataset
+      const tookCount = appState.meds.filter(m => m.status === 'TOOK').length;
+      const totalPct = Math.round((tookCount / appState.meds.length) * 100);
+      
+      const todayRecord = appState.daysData.find(d => d.date === appState.today.date);
+      if (todayRecord) {
+        todayRecord.medsPct = totalPct;
+      }
+
+      saveState();
+      renderMeds();
+      renderCalendar();
+      renderProgressCanvas();
+    }
+
+    // Dynamic Focus Mode
+    let currentFocusMedIdx = 0;
+    function launchFocusMode() {
+      // Find first unlogged or default to 0
+      const unloggedIdx = appState.meds.findIndex(m => m.status !== 'TOOK');
+      currentFocusMedIdx = unloggedIdx > -1 ? unloggedIdx : 0;
+      updateFocusModeUI();
+      document.getElementById('focusModeModal').classList.remove('hidden');
+    }
+    function closeFocusMode() {
+      document.getElementById('focusModeModal').classList.add('hidden');
+    }
+    function updateFocusModeUI() {
+      const med = appState.meds[currentFocusMedIdx];
+      document.getElementById('focusMedName').innerText = `${med.name} ${med.dose}`;
+      document.getElementById('focusMedSchedule').innerText = `Tervezett idő: ${med.schedule}`;
+    }
+    function logFocusAnswer(status) {
+      setMedStatus(currentFocusMedIdx, status);
+      currentFocusMedIdx++;
+      if (currentFocusMedIdx < appState.meds.length) {
+        updateFocusModeUI();
+      } else {
+        closeFocusMode();
+      }
+    }
+
+    // --- PAGE 3: NAPTÁR (CALENDAR) ---
+    function toggleHidePercentages() {
+      appState.hidePercentages = !appState.hidePercentages;
+      document.getElementById('togglePctBtn').innerText = appState.hidePercentages ? "% Megjelenítése" : "% Elrejtése";
+      saveState();
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const grid = document.getElementById('calendarGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      // 30 days rendered for current month view
+      const monthDays = appState.daysData.slice(60, 90);
+
+      monthDays.forEach((day, idx) => {
+        const cell = document.createElement('button');
+        cell.onclick = () => showCalendarDayDetail(day);
+
+        if (day.isGap) {
+          cell.className = "h-10 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 text-slate-500 flex flex-col items-center justify-center text-[10px] transition hover:border-slate-500";
+          cell.innerHTML = `<span>${idx + 1}</span><span class="text-[8px] text-slate-600">-</span>`;
+        } else {
+          // Calm teal color fill based on completeness
+          const alpha = (day.completeness / 100) * 0.4 + 0.1;
+          cell.className = "h-10 rounded-xl border border-slate-800 text-slate-200 flex flex-col items-center justify-center text-[10px] font-semibold transition hover:scale-105";
+          cell.style.backgroundColor = `rgba(20, 184, 166, ${alpha})`;
+          cell.innerHTML = `
+            <span>${idx + 1}</span>
+            <span class="text-[9px] text-brand-300 font-mono">${appState.hidePercentages ? '✓' : day.completeness + '%'}</span>
+          `;
+        }
+
+        grid.appendChild(cell);
+      });
+    }
+
+    function showCalendarDayDetail(day) {
+      const container = document.getElementById('calendarDayDetail');
+      container.classList.remove('hidden');
+
+      document.getElementById('detailDate').innerText = day.date;
+      document.getElementById('detailPct').innerText = day.isGap ? "Szüneteltetett nap" : `${day.completeness}% teljesítve`;
+
+      const content = document.getElementById('detailContent');
+      if (day.isGap) {
+        content.innerHTML = `<p class="text-slate-400 italic">Ezen a napon nem történt bejegyzés (semleges szünet).</p>`;
+      } else {
+        content.innerHTML = `
+          <div class="flex gap-4 text-[11px]">
+            <span>Energia: <strong class="text-brand-300">${day.energy}%</strong></span>
+            <span>Hangulat: <strong class="text-brand-300">${day.mood}%</strong></span>
+            <span>Gyógyszer: <strong class="text-brand-300">${day.medsPct}%</strong></span>
+          </div>
+          <div class="text-[10px] text-slate-400">Rögzített címkék: ${day.activeBubbles.join(', ') || 'Alapértelmezett'}</div>
+        `;
+      }
+    }
+
+    // --- PAGE 4: ELEMZÉS (GRAPH & PATTERNS) ---
+    function setGraphRange(range) {
+      appState.graphRange = range;
+      [14, 30, 90].forEach(r => {
+        const btn = document.getElementById(`range-${r}`);
+        if (!btn) return;
+        if (r === range) {
+          btn.className = "px-2 py-0.5 rounded bg-brand-600 text-white font-bold";
+        } else {
+          btn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white";
+        }
+      });
+      saveState();
+      renderProgressCanvas();
+    }
+
+    function renderGraphToggles() {
+      const container = document.getElementById('graphTogglesContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      // Core metrics + all bubble labels
+      const allAvailable = [
+        { key: 'energy', label: 'Energia (0-100)', color: '#38bdf8' },
+        { key: 'mood', label: 'Hangulat (0-100)', color: '#34d399' },
+        { key: 'meds', label: 'Bevett adagok %', color: '#a78bfa' }
+      ];
+
+      appState.bubbles.forEach(b => {
+        allAvailable.push({ key: b.label, label: `${b.icon || ''} ${b.label}`, color: '#f43f5e' });
+      });
+
+      allAvailable.forEach(item => {
+        const isActive = appState.activeGraphOverlays.includes(item.key);
+        const btn = document.createElement('button');
+        btn.onclick = () => toggleGraphOverlay(item.key);
+
+        if (isActive) {
+          btn.className = "px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-100 border border-brand-500/50 flex items-center gap-1 shadow-sm";
+        } else {
+          btn.className = "px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-950 text-slate-500 border border-slate-800 hover:text-slate-300";
+        }
+
+        btn.innerHTML = `<span class="w-2 h-2 rounded-full inline-block" style="background-color: ${item.color}"></span> ${item.label}`;
+        container.appendChild(btn);
+      });
+    }
+
+    function toggleGraphOverlay(key) {
+      const idx = appState.activeGraphOverlays.indexOf(key);
+      if (idx > -1) {
+        if (appState.activeGraphOverlays.length > 1) {
+          appState.activeGraphOverlays.splice(idx, 1);
+        }
+      } else {
+        appState.activeGraphOverlays.push(key);
+      }
+      saveState();
+      renderGraphToggles();
+      renderProgressCanvas();
+    }
+
+    function renderProgressCanvas() {
+      const canvas = document.getElementById('progressCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      // Crisp HiDPI scaling
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const width = rect.width;
+      const height = rect.height;
+
+      // Clear Background
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, width, height);
+
+      // Grid lines
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      for (let y = 0.2; y <= 0.8; y += 0.3) {
+        ctx.beginPath();
+        ctx.moveTo(0, height * y);
+        ctx.lineTo(width, height * y);
+        ctx.stroke();
+      }
+
+      // Slice dataset
+      const dataSlice = appState.daysData.slice(90 - appState.graphRange, 90);
+      const stepX = width / (dataSlice.length - 1);
+
+      // Color Map
+      const colorMap = {
+        energy: '#38bdf8',
+        mood: '#34d399',
+        meds: '#a78bfa'
+      };
+
+      // Draw each active overlay line
+      appState.activeGraphOverlays.forEach(overlayKey => {
+        const strokeColor = colorMap[overlayKey] || '#f43f5e';
+        ctx.strokeStyle = strokeColor;
+        ctx.fillStyle = strokeColor;
+        ctx.lineWidth = 2.5;
+
+        let drawing = false;
+        ctx.beginPath();
+
+        dataSlice.forEach((day, idx) => {
+          let val = null;
+          if (!day.isGap) {
+            if (overlayKey === 'energy') val = day.energy;
+            else if (overlayKey === 'mood') val = day.mood;
+            else if (overlayKey === 'meds') val = day.medsPct;
+            else if (day.activeBubbles && day.activeBubbles.includes(overlayKey)) {
+              val = 80; // Binary active bubble pulse
+            }
+          }
+
+          const x = idx * stepX;
+          if (val !== null) {
+            const y = height - (val / 100) * (height - 20) - 10;
+            if (!drawing) {
+              ctx.moveTo(x, y);
+              drawing = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
+          } else {
+            // Render gap break
+            if (drawing) {
+              ctx.stroke();
+              drawing = false;
+            }
+          }
+        });
+
+        if (drawing) ctx.stroke();
+
+        // Render Data Dots
+        dataSlice.forEach((day, idx) => {
+          let val = null;
+          if (!day.isGap) {
+            if (overlayKey === 'energy') val = day.energy;
+            else if (overlayKey === 'mood') val = day.mood;
+            else if (overlayKey === 'meds') val = day.medsPct;
+            else if (day.activeBubbles && day.activeBubbles.includes(overlayKey)) val = 80;
+          }
+          if (val !== null) {
+            const x = idx * stepX;
+            const y = height - (val / 100) * (height - 20) - 10;
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
+      });
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('timelineContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const decisionDays = appState.daysData.filter(d => d.decisionLogged).slice(-4);
+
+      decisionDays.forEach(item => {
+        const row = document.createElement('div');
+        row.className = "bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 space-y-1 text-xs";
+        row.innerHTML = `
+          <div class="flex justify-between text-[10px] text-slate-400">
+            <span class="font-mono text-slate-300">${item.date}</span>
+            <span class="bg-sky-950 text-sky-300 px-1.5 py-0.2 rounded border border-sky-800">Döntés naplózva</span>
+          </div>
+          <div class="font-semibold text-slate-200">
+            Kiváltó tényező / Döntés: <span class="text-brand-300">${item.decisionLogged}</span>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            Utólagos Reakció (Következő 24h): <span class="text-teal-300 font-medium">${item.reactionObserved}</span>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function renderPatterns() {
+      const container = document.getElementById('patternsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const patterns = [
+        {
+          id: 'p1',
+          title: 'Alvás < 6 óra ➔ Alacsonyabb Energia másnap',
+          desc: 'Az elmúlt 30 napodból 9 alkalommal fordult elő együtt (nem ok-okozati állítás).',
+          confounder: 'Koffein bevitele jelen volt 7 napon.'
+        },
+        {
+          id: 'p2',
+          title: 'Séta az erdőben ➔ Magasabb Nyugalom pontszám',
+          desc: 'Az elmúlt 14 napodból 5 alkalommal fordult elő együtt.',
+          confounder: 'Mellékhatás-mentes adagolási napokon.'
+        }
+      ];
+
+      patterns.forEach(pat => {
+        const status = appState.patternStatus[pat.id] || 'kept';
+        if (status === 'hidden') return;
+
+        const card = document.createElement('div');
+        card.className = "bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2";
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <h4 class="font-bold text-xs text-slate-100">${pat.title}</h4>
+            <span class="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">Együtt fordul elő</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">${pat.desc}</p>
+          <div class="text-[10px] text-slate-400 bg-slate-950 p-2 rounded-lg border border-slate-800">
+            💡 Zavaró tényező (Confounder): ${pat.confounder}
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button onclick="setPatternFeedback('${pat.id}', 'kept')" class="px-2.5 py-1 text-[11px] rounded-lg ${status === 'kept' ? 'bg-brand-600 text-white' : 'bg-slate-950 text-slate-400 border border-slate-800'}">
+              ✓ Megtartás
+            </button>
+            <button onclick="setPatternFeedback('${pat.id}', 'hidden')" class="px-2.5 py-1 text-[11px] bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg">
+              ✕ Elrejtés
+            </button>
+            <button onclick="setPatternFeedback('${pat.id}', 'wrong')" class="px-2.5 py-1 text-[11px] bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg">
+              ⚠️ Ez téves
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function setPatternFeedback(id, status) {
+      appState.patternStatus[id] = status;
+      saveState();
+      renderPatterns();
+    }
+
+    // --- PAGE 5: BIZTONSÁG & CRISIS ---
+    const RED_FLAGS_LIST = [
+      "Láz ≥ 38,0 °C",
+      "Izommerevség",
+      "Erős remegés / rángás",
+      "Nyugalmi verejtékezés",
+      "Súlyos zavartság",
+      "Hirtelen hányás / hasmenés",
+      "Szapora pulzus"
+    ];
+
+    function renderRedFlags() {
+      const container = document.getElementById('redFlagChipsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      RED_FLAGS_LIST.forEach(flag => {
+        const isSelected = appState.redFlags.includes(flag);
+        const btn = document.createElement('button');
+        btn.onclick = () => toggleRedFlag(flag);
+
+        if (isSelected) {
+          btn.className = "p-2 rounded-xl text-left bg-rose-900/80 border border-rose-500 text-rose-100 font-semibold transition";
+        } else {
+          btn.className = "p-2 rounded-xl text-left bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800 transition";
+        }
+
+        btn.innerText = flag;
+        container.appendChild(btn);
+      });
+
+      // Show/Hide Emergency Banner
+      const banner = document.getElementById('redFlagWarningBanner');
+      if (appState.redFlags.length >= 2) {
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    function toggleRedFlag(flag) {
+      const idx = appState.redFlags.indexOf(flag);
+      if (idx > -1) appState.redFlags.splice(idx, 1);
+      else appState.redFlags.push(flag);
+
+      saveState();
+      renderRedFlags();
+      renderCrisisMeds();
+    }
+
+    // Crisis Modal & TTS
+    function openCrisisModal() {
+      renderCrisisMeds();
+      document.getElementById('crisisModal').classList.remove('hidden');
+    }
+    function closeCrisisModal() {
+      document.getElementById('crisisModal').classList.add('hidden');
+    }
+
+    function renderCrisisMeds() {
+      const listContainer = document.getElementById('crisisMedsList');
+      if (!listContainer) return;
+      listContainer.innerHTML = '';
+
+      appState.meds.forEach(m => {
+        const item = document.createElement('div');
+        item.className = "flex justify-between items-center bg-slate-950 p-2 rounded-lg border border-slate-800";
+        item.innerHTML = `
+          <div>
+            <strong class="text-slate-100">${m.name}</strong> (${m.dose})
+            <div class="text-[10px] text-slate-400">Tervezett: ${m.schedule}</div>
+          </div>
+          <span class="font-mono text-brand-400 font-bold">${m.status}</span>
+        `;
+        listContainer.appendChild(item);
+      });
+
+      // Red flags list in crisis modal
+      const crisisFlagsEl = document.getElementById('crisisRedFlagsList');
+      if (appState.redFlags.length > 0) {
+        crisisFlagsEl.innerHTML = `<ul class="list-disc pl-4 text-rose-300 font-semibold space-y-0.5">` + 
+          appState.redFlags.map(f => `<li>${f}</li>`).join('') + `</ul>`;
+      } else {
+        crisisFlagsEl.innerText = "Nincs aktív vörös zászló tünet kiválasztva.";
+      }
+    }
+
+    function speakCrisisSummary() {
+      if (!('speechSynthesis' in window)) {
+        alert("A böngésződ nem támogatja a szöveg-felolvasást.");
+        return;
+      }
+      window.speechSynthesis.cancel();
+
+      const barrierText = document.getElementById('crisisBarrierText').innerText;
+      const medsText = appState.meds.map(m => `${m.name} ${m.dose}`).join(', ');
+      const flagsText = appState.redFlags.length > 0 ? `Aktív tünetek: ${appState.redFlags.join(', ')}.` : '';
+
+      const fullUtterance = new SpeechSynthesisUtterance(
+        `Sürgősségi információ: ${barrierText}. Szedett gyógyszerek: ${medsText}. ${flagsText}`
+      );
+      fullUtterance.lang = appState.lang === 'hu' ? 'hu-HU' : 'en-US';
+      window.speechSynthesis.speak(fullUtterance);
+    }
+
+    // Doctor Share & Wallpaper Generator
+    function generateDoctorLink() {
+      const out = document.getElementById('doctorShareOutput');
+      out.classList.remove('hidden');
+      const token = Math.random().toString(36).substring(2, 10);
+      out.innerHTML = `
+        <div>✅ <strong>Időkorlátos Read-Only Link Létrehozva:</strong></div>
+        <div class="text-teal-400 underline mt-1">https://serosafe.app/v/${token}?expires=24h</div>
+        <div class="text-[10px] text-slate-400 mt-1">Az orvos hivatkozást hagyhat a naplódhoz anélkül, hogy módosíthatná.</div>
+      `;
+    }
+
+    function generateLockscreenWallpaper() {
+      const canvas = document.getElementById('lockscreenCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // Background
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, 1080, 1920);
+
+      // Header
+      ctx.fillStyle = '#14b8a6';
+      ctx.font = 'bold 56px sans-serif';
+      ctx.fillText('SeroSafe — Emergency Card', 90, 180);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '36px sans-serif';
+      ctx.fillText('Lock-Screen Summary for Paramedics', 90, 240);
+
+      // Box 1
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(90, 320, 900, 450);
+      ctx.fillStyle = '#f43f5e';
+      ctx.font = 'bold 40px sans-serif';
+      ctx.fillText('Current Medications & Doses:', 130, 400);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '36px monospace';
+      let y = 480;
+      appState.meds.forEach(m => {
+        ctx.fillText(`• ${m.name} ${m.dose} (${m.schedule})`, 130, y);
+        y += 65;
+      });
+
+      // Box 2
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(90, 820, 900, 350);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 40px sans-serif';
+      ctx.fillText('Communication & Barrier Profile:', 130, 900);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '32px sans-serif';
+      ctx.fillText('Patient may freeze during acute shutdown.', 130, 970);
+      ctx.fillText('Please refer to listed meds and contact 112.', 130, 1030);
+
+      // Footer
+      ctx.fillStyle = '#64748b';
+      ctx.font = '28px sans-serif';
+      ctx.fillText('Generated offline by SeroSafe PWA', 90, 1800);
+
+      // Download Trigger
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `SeroSafe-Lockscreen-${appState.today.date}.png`;
+      a.click();
+    }
+
+    // Export & Purge
+    function exportDataJSON() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `serosafe-backup-${appState.today.date}.json`;
+      a.click();
+    }
+
+    function exportDataCSV() {
+      let csv = "Date,Completeness,Energy,Mood,MedsPct\n";
+      appState.daysData.forEach(d => {
+        csv += `${d.date},${d.completeness},${d.energy || ''},${d.mood || ''},${d.medsPct || ''}\n`;
+      });
+      const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `serosafe-data-${appState.today.date}.csv`;
+      a.click();
+    }
+
+    function deleteAllData() {
+      if (confirm("Biztosan törölni szeretnéd az összes mentett adatot a telefonodról? Ez nem visszavonható.")) {
+        localStorage.removeItem(STORAGE_KEY);
+        location.reload();
+      }
+    }
+  </script>
+</body>
+</html>

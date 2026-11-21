@@ -1,0 +1,114 @@
+/* SeroSafe Design Tokens — Low-Sensory Organic Sage & Clinical Clarity
+ * Uses oklch() perceptual color space with semantic light/dark themes and fixed crisis mode.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Core Surfaces */
+  --color-canvas: oklch(0.968 0.006 105);
+  --color-surface: oklch(0.996 0.002 105);
+  --color-surface-subtle: oklch(0.945 0.012 145);
+  --color-surface-blue: oklch(0.945 0.018 232);
+  --color-surface-elevated: oklch(0.985 0.004 105);
+
+  /* Borders & Hairlines */
+  --color-border: oklch(0.91 0.008 115);
+  --color-border-strong: oklch(0.81 0.014 130);
+
+  /* Ink & Typography */
+  --color-ink: oklch(0.235 0.020 250);
+  --color-ink-muted: oklch(0.455 0.020 245);
+  --color-ink-on-accent: oklch(0.985 0.005 140);
+
+  /* Primary Botanical Sage Accent */
+  --color-accent: oklch(0.44 0.055 158);
+  --color-accent-strong: oklch(0.36 0.058 158);
+  --color-accent-soft: oklch(0.91 0.025 155);
+  --color-accent-border: oklch(0.78 0.045 156);
+
+  /* Secondary Fjord Blue (Insights / Neutral Secondary) */
+  --color-secondary: oklch(0.49 0.068 232);
+  --color-secondary-soft: oklch(0.92 0.025 232);
+  --color-secondary-border: oklch(0.78 0.045 232);
+
+  /* Clinical Semantics (Anti-Reassurance: NO "Green Safe" status) */
+  --color-info: oklch(0.48 0.06 232);
+  --color-info-soft: oklch(0.935 0.02 232);
+  --color-warning: oklch(0.64 0.145 72);
+  --color-warning-ink: oklch(0.34 0.08 65);
+  --color-warning-soft: oklch(0.955 0.045 80);
+  --color-warning-border: oklch(0.80 0.10 75);
+
+  --color-emergency: oklch(0.51 0.195 25);
+  --color-emergency-ink: oklch(0.99 0.004 25);
+  --color-emergency-soft: oklch(0.945 0.042 22);
+  --color-emergency-border: oklch(0.75 0.12 25);
+
+  /* Chart Series (Distinct luminance + hues for color-vision safety) */
+  --color-chart-energy: oklch(0.49 0.085 232);
+  --color-chart-mood: oklch(0.45 0.065 158);
+  --color-chart-doses: oklch(0.30 0.025 250);
+  --color-chart-sensory: oklch(0.54 0.085 295);
+  --color-chart-cognitive: oklch(0.56 0.11 58);
+
+  /* Fixed High-Contrast Crisis Card Surface */
+  --color-crisis-bg: oklch(0.115 0.006 260);
+  --color-crisis-surface: oklch(0.175 0.008 260);
+  --color-crisis-border: oklch(0.32 0.012 260);
+  --color-crisis-ink: oklch(0.985 0.003 100);
+  --color-crisis-muted: oklch(0.78 0.01 255);
+  --color-crisis-amber: oklch(0.83 0.165 82);
+  --color-crisis-amber-ink: oklch(0.16 0.03 80);
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px oklch(0.2 0.02 240 / 0.05), 0 4px 12px oklch(0.2 0.02 240 / 0.04);
+  --shadow-floating: 0 10px 28px oklch(0.15 0.02 240 / 0.14), 0 2px 6px oklch(0.15 0.02 240 / 0.08);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-canvas: oklch(0.165 0.014 235);
+  --color-surface: oklch(0.215 0.016 235);
+  --color-surface-subtle: oklch(0.255 0.022 175);
+  --color-surface-blue: oklch(0.25 0.026 235);
+  --color-surface-elevated: oklch(0.245 0.018 235);
+
+  --color-border: oklch(0.30 0.015 235);
+  --color-border-strong: oklch(0.42 0.020 225);
+
+  --color-ink: oklch(0.935 0.008 110);
+  --color-ink-muted: oklch(0.735 0.016 225);
+  --color-ink-on-accent: oklch(0.15 0.02 160);
+
+  --color-accent: oklch(0.73 0.082 162);
+  --color-accent-strong: oklch(0.80 0.085 162);
+  --color-accent-soft: oklch(0.285 0.036 162);
+  --color-accent-border: oklch(0.46 0.06 162);
+
+  --color-secondary: oklch(0.73 0.078 232);
+  --color-secondary-soft: oklch(0.28 0.038 232);
+  --color-secondary-border: oklch(0.46 0.06 232);
+
+  --color-info: oklch(0.74 0.075 232);
+  --color-info-soft: oklch(0.27 0.032 232);
+  --color-warning: oklch(0.78 0.14 78);
+  --color-warning-ink: oklch(0.94 0.04 82);
+  --color-warning-soft: oklch(0.28 0.048 72);
+  --color-warning-border: oklch(0.55 0.11 76);
+
+  --color-emergency: oklch(0.65 0.195 25);
+  --color-emergency-ink: oklch(0.99 0.004 25);
+  --color-emergency-soft: oklch(0.27 0.065 25);
+  --color-emergency-border: oklch(0.56 0.15 25);
+
+  --color-chart-energy: oklch(0.74 0.085 232);
+  --color-chart-mood: oklch(0.74 0.085 162);
+  --color-chart-doses: oklch(0.89 0.012 110);
+  --color-chart-sensory: oklch(0.75 0.095 295);
+  --color-chart-cognitive: oklch(0.76 0.11 64);
+
+  --shadow-card: 0 1px 2px oklch(0.05 0.01 240 / 0.35), 0 4px 12px oklch(0.05 0.01 240 / 0.25);
+  --shadow-floating: 0 12px 32px oklch(0.04 0.01 240 / 0.55), 0 2px 6px oklch(0.04 0.01 240 / 0.35);
+}

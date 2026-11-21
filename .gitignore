@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+android
+ios
+.env
+.env.*
+*.local
+.DS_Store
+Thumbs.db
+*.log
+~$*.docx
+coverage
+.impeccable/
+.playwright-mcp
+graphify-out/

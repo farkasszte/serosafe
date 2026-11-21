@@ -1,0 +1,39 @@
+{
+  "name": "serosafe",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "SeroSafe — Offline-first neurodivergent-affirming serotonergic medication safety and emergency AAC companion.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 4173",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cap:sync": "bun run build && npx cap sync",
+    "cap:android": "bun run build && npx cap sync android && npx cap open android",
+    "cap:ios": "bun run build && npx cap sync ios && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.6.2",
+    "dexie": "^4.4.7",
+    "lucide-react": "^1.77.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.1"
+  }
+}
