@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
+import { useEffect, useMemo, useState } from 'react';
 import { Printer, X } from 'lucide-react';
+import { ModalDialog } from '@/components/modals/ModalDialog';
 import { PAIN_QUALITIES } from '@/data/substances';
+import { prioritizeMedicationsForEmergency } from '@/engine/safetyEngine';
 import type {
   DailyLogEntry,
   PatternInsight,
   StructuredAssessment,
   UserMedication,
 } from '@/types/serosafe';
+import { formatLocalDateKey } from '@/utils/date';
 
 interface ClinicalReportDialogProps {
   open: boolean;
@@ -29,45 +31,88 @@ export function ClinicalReportDialog({
   patterns,
 }: ClinicalReportDialogProps) {
   const hu = lang === 'hu';
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
-  const recentLogs = logs
-    .filter((l) => !l.isGap)
-    .slice()
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 14);
+  const recentLogs = useMemo(
+    () =>
+      logs
+        .filter((l) => !l.isGap)
+        .slice()
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 14),
+    [logs],
+  );
+
+  const relevantEmergencyMeds = useMemo(
+    () => prioritizeMedicationsForEmergency(medications, assessment),
+    [medications, assessment],
+  );
+
+  const keptPatterns = useMemo(
+    () => patterns.filter((p) => p.status !== 'hidden' && p.status !== 'wrong'),
+    [patterns],
+  );
+
+  const activeReasons = hu
+    ? assessment.summaryReasonsHu
+    : assessment.summaryReasonsEn;
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      dialog.showModal();
-      const summary = [
-        'SEROSAFE CLINICAL SUMMARY (OFFLINE)',
-        `DATE:${new Date().toISOString().slice(0, 10)}`,
-        `MEDS:${medications
-          .map((m) => `${m.customName} ${m.doseText}${m.isDiscontinued ? ' [WASHOUT]' : ''}`)
-          .join('; ')}`,
-        `LEVEL:${assessment.level}`,
-        `LOG_DAYS_14D:${recentLogs.length}`,
-      ].join('\n');
-      QRCode.toDataURL(summary, { width: 160, margin: 1 })
-        .then(setQrDataUrl)
-        .catch(() => setQrDataUrl(''));
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open, medications, assessment.level, recentLogs.length]);
+    if (!open) return;
+    let cancelled = false;
+    const summary = [
+      'SEROSAFE CLINICAL SUMMARY (OFFLINE)',
+      `DATE:${formatLocalDateKey(new Date())}`,
+      `MEDS:${relevantEmergencyMeds
+        .map((m) => {
+          const exp = assessment.exposures.find((e) => e.medicationId === m.id);
+          const tag =
+            m.isDiscontinued && exp?.isInWashoutWindow
+              ? ` [WASHOUT:${exp.daysRemainingInWashout}d]`
+              : '';
+          return `${m.customName.slice(0, 32)} ${m.doseText.slice(0, 16)}${tag}`;
+        })
+        .join('; ')
+        .slice(0, 360)}`,
+      `LEVEL:${assessment.level}`,
+      `LOG_DAYS_14D:${recentLogs.length}`,
+    ].join('\n');
 
-  const keptPatterns = patterns.filter((p) => p.status !== 'hidden');
+    import('qrcode')
+      .then(({ default: QRCode }) =>
+        QRCode.toDataURL(summary, { width: 160, margin: 1 }),
+      )
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl('');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, relevantEmergencyMeds, assessment, recentLogs.length]);
+
+  function formatMedScheduleLabel(m: UserMedication): string {
+    if (!m.isDiscontinued) return m.scheduleTime;
+    const exp = assessment.exposures.find((e) => e.medicationId === m.id);
+    if (exp?.isInWashoutWindow) {
+      return hu
+        ? `Leállítva / aktív kiürülés (~${exp.daysRemainingInWashout} nap)`
+        : `Discontinued / washout active (~${exp.daysRemainingInWashout}d left)`;
+    }
+    return hu
+      ? 'Leállítva (kiürülés letelt)'
+      : 'Discontinued (washout complete)';
+  }
 
   function formatPainText(log: DailyLogEntry): string {
     if (!log.painLevel || log.painLevel <= 0) return '';
     const qLabels = (log.painQualities ?? [])
       .map((qid) => PAIN_QUALITIES.find((q) => q.id === qid))
-      .filter(Boolean)
-      .map((q) => (hu ? q!.labelHu : q!.labelEn));
+      .filter((q): q is NonNullable<typeof q> => Boolean(q))
+      .map((q) => (hu ? q.labelHu : q.labelEn));
     const prefix = hu ? 'Fájdalom' : 'Pain';
     return qLabels.length > 0
       ? `${prefix}: ${log.painLevel}/10 (${qLabels.join(', ')})`
@@ -76,16 +121,10 @@ export function ClinicalReportDialog({
 
   return (
     <>
-      <dialog
-        ref={dialogRef}
-        onCancel={(e) => {
-          e.preventDefault();
-          onClose();
-        }}
-        onClick={(e) => {
-          if (e.target === dialogRef.current) onClose();
-        }}
-        aria-labelledby="clinical-report-title"
+      <ModalDialog
+        open={open}
+        onClose={onClose}
+        ariaLabelledBy="clinical-report-title"
         className="serosafe-dialog w-[min(100vw-24px,680px)] max-h-[90dvh] rounded-3xl overflow-hidden"
       >
         <div className="max-h-[90dvh] overflow-y-auto calm-scroll p-3.5 @[480px]:p-5 space-y-4">
@@ -128,12 +167,7 @@ export function ClinicalReportDialog({
                 {medications.map((m) => (
                   <li key={m.id}>
                     <strong>{m.customName}</strong> — {m.doseText} (
-                    {m.isDiscontinued
-                      ? hu
-                        ? 'Leállítva / kiürülés követése'
-                        : 'Discontinued / Washout'
-                      : m.scheduleTime}
-                    )
+                    {formatMedScheduleLabel(m)})
                   </li>
                 ))}
               </ul>
@@ -171,7 +205,7 @@ export function ClinicalReportDialog({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {recentLogs.slice(0, 7).map((l) => {
+                  {recentLogs.map((l) => {
                     const painTxt = formatPainText(l);
                     const noteTxt = [painTxt, l.note || l.decisionNote]
                       .filter(Boolean)
@@ -227,33 +261,61 @@ export function ClinicalReportDialog({
             </button>
           </div>
         </div>
-      </dialog>
+      </ModalDialog>
 
       {/* Print-only mirror block rendered cleanly on paper/PDF */}
       <div id="printable-clinical-report" aria-hidden="true">
         <h1 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '6px' }}>
-          SeroSafe — {hu ? 'Beteg által vezetett gyógyszer- és tünetösszefoglaló' : 'Patient Medication & Symptom Summary'}
+          SeroSafe —{' '}
+          {hu
+            ? 'Beteg által vezetett gyógyszer- és tünetösszefoglaló'
+            : 'Patient Medication & Symptom Summary'}
         </h1>
         <p style={{ marginBottom: '12px' }}>
           {hu
-            ? 'Generálva internet nélkül • Nem orvosi diagnózis • A beteg saját eszköze alapján.'
-            : 'Generated 100% offline • Not a medical diagnosis.'}
+            ? `Generálva internet nélkül (${formatLocalDateKey(new Date())}) • Nem orvosi diagnózis • A beteg saját eszköze alapján.`
+            : `Generated 100% offline (${formatLocalDateKey(new Date())}) • Not a medical diagnosis.`}
         </p>
+
+        {qrDataUrl && (
+          <img
+            src={qrDataUrl}
+            alt="Offline QR"
+            style={{ width: '112px', height: '112px', marginBottom: '10px' }}
+          />
+        )}
+
         <h2 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>
-          {hu ? 'Gyógyszerek és kiürülési időszakok' : 'Medications & washout windows'}
+          {hu
+            ? 'Gyógyszerek és kiürülési időszakok'
+            : 'Medications & washout windows'}
         </h2>
         <ul style={{ marginBottom: '12px', paddingLeft: '18px' }}>
           {medications.map((m) => (
             <li key={m.id}>
-              {m.customName} ({m.doseText}) — {m.scheduleTime}
+              {m.customName} ({m.doseText}) — {formatMedScheduleLabel(m)}
             </li>
           ))}
         </ul>
+
+        {activeReasons.length > 0 && (
+          <>
+            <h2 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>
+              {hu ? 'Strukturált figyelmeztetések' : 'Structured clinical notices'}
+            </h2>
+            <ul style={{ marginBottom: '12px', paddingLeft: '18px' }}>
+              {activeReasons.map((r, idx) => (
+                <li key={idx}>{r}</li>
+              ))}
+            </ul>
+          </>
+        )}
+
         <h2 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>
-          {hu ? 'Legutóbbi napok' : 'Recent days'}
+          {hu ? 'Utolsó 14 naplózott nap' : 'Last 14 logged days'}
         </h2>
-        <ul style={{ paddingLeft: '18px' }}>
-          {recentLogs.slice(0, 10).map((l) => {
+        <ul style={{ marginBottom: '12px', paddingLeft: '18px' }}>
+          {recentLogs.map((l) => {
             const painTxt = formatPainText(l);
             return (
               <li key={l.date}>
@@ -266,11 +328,25 @@ export function ClinicalReportDialog({
                   : '—'}
                 , {hu ? 'Adag' : 'Meds'} {l.medsTakenPct ?? '—'}%{' '}
                 {painTxt ? `— ${painTxt}` : ''}
+                {l.decisionNote ? ` — ${l.decisionNote}` : ''}
                 {l.note ? ` — ${l.note}` : ''}
               </li>
             );
           })}
         </ul>
+
+        {keptPatterns.length > 0 && (
+          <>
+            <h2 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>
+              {hu ? 'Együttjárási megfigyelések' : 'Observed co-occurrences'}
+            </h2>
+            <ul style={{ paddingLeft: '18px' }}>
+              {keptPatterns.map((p) => (
+                <li key={p.id}>{hu ? p.titleHu : p.titleEn}</li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     </>
   );

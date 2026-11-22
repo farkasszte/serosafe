@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -13,9 +13,16 @@ import {
   Upload,
 } from 'lucide-react';
 import { BodyMap } from '@/components/visuals/BodyMap';
-import { getSelectedBodyRegions } from '@/data/choirBodyRegions';
-import { BODY_SENSATIONS, CURATED_SUBSTANCES } from '@/data/substances';
+import { CURATED_SUBSTANCES } from '@/data/substances';
 import { evaluateRiskAndSymptoms } from '@/engine/safetyEngine';
+import {
+  applyBodyPartsUpdate,
+  applyPainLevelChange,
+  applyPainQualityToggle,
+  applySensationToggle,
+  applySymptomFieldUpdate,
+} from '@/engine/symptomSync';
+import { validateImportedState } from '@/services/db';
 import { formatAssessmentLevel, formatDrugClass, STRINGS } from '@/services/i18n';
 import { generateLockScreenPng } from '@/services/lockscreenGenerator';
 import type {
@@ -25,6 +32,7 @@ import type {
   ObservableSymptomEntry,
   PainQualityId,
   SeroSafeState,
+  StructuredAssessment,
   UserMedication,
 } from '@/types/serosafe';
 
@@ -34,11 +42,20 @@ interface SafetyPageProps {
   todayLog: DailyLogEntry;
   medications: UserMedication[];
   profile: CommunicationProfile;
-  onUpdateTodayLog: (updater: (prev: DailyLogEntry) => DailyLogEntry) => void;
+  baseAssessment: StructuredAssessment;
+  onUpdateTodayLog: (
+    updater: (prev: DailyLogEntry) => DailyLogEntry,
+    options?: { recomputePatterns?: boolean },
+  ) => void;
   onOpenCrisisCard: () => void;
   onOpenClinicalReport: () => void;
   onImportStateJson: (imported: SeroSafeState) => void;
   onResetAllData: () => void;
+}
+
+function escapeCsvCell(raw: string): string {
+  const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 export function SafetyPage({
@@ -47,6 +64,7 @@ export function SafetyPage({
   todayLog,
   medications,
   profile,
+  baseAssessment,
   onUpdateTodayLog,
   onOpenCrisisCard,
   onOpenClinicalReport,
@@ -65,105 +83,31 @@ export function SafetyPage({
 
   const symptom = todayLog.symptomEntry;
 
-  const assessment = evaluateRiskAndSymptoms(
-    medications,
-    CURATED_SUBSTANCES,
-    symptom,
-    candidateSubstanceId || undefined,
+  const assessment = useMemo(
+    () =>
+      candidateSubstanceId
+        ? evaluateRiskAndSymptoms(
+            medications,
+            CURATED_SUBSTANCES,
+            symptom,
+            candidateSubstanceId,
+          )
+        : baseAssessment,
+    [candidateSubstanceId, medications, symptom, baseAssessment],
   );
-
-  function ensureSymptom(prev: DailyLogEntry): ObservableSymptomEntry {
-    return (
-      prev.symptomEntry ?? {
-        id: `sym_${prev.date}`,
-        timestampIso: new Date().toISOString(),
-        onsetHoursAgo: 1,
-        hasInvoluntaryTwitching: false,
-        hasTremor: false,
-        hasMuscleStiffness: false,
-        hasHeavySweating: false,
-        hasSevereRestlessnessOrConfusion: false,
-        hasGIDistress: false,
-        selectedBodyRegions: prev.bodyRegions,
-        selectedSensations: prev.bodySensations,
-      }
-    );
-  }
 
   function updateSymptomField<K extends keyof ObservableSymptomEntry>(
     field: K,
     value: ObservableSymptomEntry[K],
   ) {
-    onUpdateTodayLog((prev) => {
-      const sym = ensureSymptom(prev);
-      return {
-        ...prev,
-        isGap: false,
-        symptomEntry: {
-          ...sym,
-          timestampIso: new Date().toISOString(),
-          [field]: value,
-        },
-      };
+    onUpdateTodayLog((prev) => applySymptomFieldUpdate(prev, field, value), {
+      recomputePatterns: false,
     });
   }
 
   function toggleSafetySensation(sensationId: string, _region: BodyRegionId) {
-    onUpdateTodayLog((prev) => {
-      const exists = prev.bodySensations.includes(sensationId);
-      const bodySensations = exists
-        ? prev.bodySensations.filter((id) => id !== sensationId)
-        : [...prev.bodySensations, sensationId];
-      const bodyRegions = getSelectedBodyRegions(
-        prev.selectedBodyPartIds ?? [],
-        prev.bodyRegions.includes('skin'),
-      );
-
-      const sym = ensureSymptom(prev);
-      const updatedSym: ObservableSymptomEntry = {
-        ...sym,
-        timestampIso: new Date().toISOString(),
-        selectedBodyRegions: bodyRegions,
-        selectedSensations: bodySensations,
-        hasInvoluntaryTwitching: bodySensations.some(
-          (sid) =>
-            BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-            'hasInvoluntaryTwitching',
-        ),
-        hasTremor: bodySensations.some(
-          (sid) =>
-            BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-            'hasTremor',
-        ),
-        hasMuscleStiffness: bodySensations.some(
-          (sid) =>
-            BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-            'hasMuscleStiffness',
-        ),
-        hasHeavySweating: bodySensations.some(
-          (sid) =>
-            BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-            'hasHeavySweating',
-        ),
-        hasSevereRestlessnessOrConfusion: bodySensations.some(
-          (sid) =>
-            BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-            'hasSevereRestlessnessOrConfusion',
-        ),
-        hasGIDistress: bodySensations.some(
-          (sid) =>
-            BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-            'hasGIDistress',
-        ),
-      };
-
-      return {
-        ...prev,
-        isGap: false,
-        bodyRegions,
-        bodySensations,
-        symptomEntry: updatedSym,
-      };
+    onUpdateTodayLog((prev) => applySensationToggle(prev, sensationId), {
+      recomputePatterns: false,
     });
   }
 
@@ -171,91 +115,32 @@ export function SafetyPage({
     partIds: string[],
     derivedRegions: BodyRegionId[],
   ) {
-    onUpdateTodayLog((prev) => {
-      const prunedSensations = prev.bodySensations.filter((sid) => {
-        const def = BODY_SENSATIONS.find((s) => s.id === sid);
-        return def ? derivedRegions.includes(def.region) : false;
-      });
-      const sym = ensureSymptom(prev);
-      return {
-        ...prev,
-        isGap: false,
-        selectedBodyPartIds: partIds,
-        bodyRegions: derivedRegions,
-        bodySensations: prunedSensations,
-        painLevel: derivedRegions.length === 0 ? 0 : prev.painLevel,
-        painQualities: derivedRegions.length === 0 ? [] : prev.painQualities,
-        symptomEntry: {
-          ...sym,
-          timestampIso: new Date().toISOString(),
-          selectedBodyRegions: derivedRegions,
-          selectedSensations: prunedSensations,
-          hasInvoluntaryTwitching: prunedSensations.some(
-            (sid) =>
-              BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-              'hasInvoluntaryTwitching',
-          ),
-          hasTremor: prunedSensations.some(
-            (sid) =>
-              BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-              'hasTremor',
-          ),
-          hasMuscleStiffness: prunedSensations.some(
-            (sid) =>
-              BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-              'hasMuscleStiffness',
-          ),
-          hasHeavySweating: prunedSensations.some(
-            (sid) =>
-              BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-              'hasHeavySweating',
-          ),
-          hasSevereRestlessnessOrConfusion: prunedSensations.some(
-            (sid) =>
-              BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-              'hasSevereRestlessnessOrConfusion',
-          ),
-          hasGIDistress: prunedSensations.some(
-            (sid) =>
-              BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-              'hasGIDistress',
-          ),
-        },
-      };
+    onUpdateTodayLog((prev) => applyBodyPartsUpdate(prev, partIds, derivedRegions), {
+      recomputePatterns: false,
     });
   }
 
   function handleChangeSafetyPainLevel(level: number) {
-    onUpdateTodayLog((prev) => ({
-      ...prev,
-      isGap: false,
-      painLevel: level,
-      painQualities: level === 0 ? [] : prev.painQualities,
-    }));
+    onUpdateTodayLog((prev) => applyPainLevelChange(prev, level), {
+      recomputePatterns: false,
+    });
   }
 
   function handleToggleSafetyPainQuality(quality: PainQualityId) {
-    onUpdateTodayLog((prev) => {
-      const current = prev.painQualities ?? [];
-      const exists = current.includes(quality);
-      return {
-        ...prev,
-        isGap: false,
-        painQualities: exists
-          ? current.filter((q) => q !== quality)
-          : [...current, quality],
-      };
+    onUpdateTodayLog((prev) => applyPainQualityToggle(prev, quality), {
+      recomputePatterns: false,
     });
   }
 
   async function handleGenerateLockScreen() {
     setGeneratingLock(true);
     try {
+      // Uses `baseAssessment` so temporary "what if I took X?" simulation never leaks into emergency lock-screen PNG
       const url = await generateLockScreenPng({
         lang,
         profile,
         meds: medications,
-        assessment,
+        assessment: baseAssessment,
         symptom,
       });
       setLockPngUrl(url);
@@ -263,6 +148,12 @@ export function SafetyPage({
         hu
           ? 'Zárolási képernyő háttérkép és QR-kód elkészült.'
           : 'Lock-screen PNG and offline QR code generated.',
+      );
+    } catch {
+      setStatusMessage(
+        hu
+          ? 'Nem sikerült elkészíteni a zárolási képet.'
+          : 'Could not generate lock-screen PNG.',
       );
     } finally {
       setGeneratingLock(false);
@@ -283,14 +174,16 @@ export function SafetyPage({
 
   function handleExportCsv() {
     const header =
-      'Date,IsGap,EnergyPct,SensoryBatteryPct,SleepHours,MedsPct,Note\n';
+      'Date,IsGap,EnergyPct,SensoryBatteryPct,SleepHours,PainLevel,MedsPct,DecisionNote,Note\n';
     const rows = state.dailyLogs
       .map(
         (d) =>
-          `${d.date},${Boolean(d.isGap)},${d.energyLevel ?? ''},${d.sensoryBattery ?? ''},${d.sleepHours ?? ''},${d.medsTakenPct ?? ''},"${(d.note || '').replace(/"/g, '""')}"`,
+          `${d.date},${Boolean(d.isGap)},${d.energyLevel ?? ''},${d.sensoryBattery ?? ''},${d.sleepHours ?? ''},${d.painLevel ?? ''},${d.medsTakenPct ?? ''},${escapeCsvCell(d.decisionNote || '')},${escapeCsvCell(d.note || '')}`,
       )
       .join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['\uFEFF' + header + rows], {
+      type: 'text/csv;charset=utf-8',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -300,16 +193,20 @@ export function SafetyPage({
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
+    inputEl.value = '';
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as SeroSafeState;
-        if (!parsed.dailyLogs || !parsed.medications) {
-          throw new Error('Invalid format');
+        const parsed: unknown = JSON.parse(String(reader.result));
+        const validated = validateImportedState(parsed);
+        if (!validated) {
+          throw new Error('Invalid SeroSafe backup format');
         }
-        onImportStateJson(parsed);
+        onImportStateJson(validated);
         setStatusMessage(
           hu ? 'Helyi mentés sikeresen visszatöltve.' : 'Backup restored locally.',
         );
@@ -495,12 +392,17 @@ export function SafetyPage({
               max={43}
               value={symptom?.measuredTempCelsius ?? ''}
               placeholder="36.8"
-              onChange={(e) =>
-                updateSymptomField(
-                  'measuredTempCelsius',
-                  e.target.value === '' ? undefined : Number(e.target.value),
-                )
-              }
+              onChange={(e) => {
+                const rawVal = e.target.value;
+                if (rawVal === '') {
+                  updateSymptomField('measuredTempCelsius', undefined);
+                  return;
+                }
+                const parsed = Number(rawVal);
+                if (Number.isFinite(parsed)) {
+                  updateSymptomField('measuredTempCelsius', parsed);
+                }
+              }}
               className="w-full px-3 py-2 rounded-xl bg-surface-subtle border border-border text-sm font-bold text-ink"
             />
           </div>
@@ -519,12 +421,17 @@ export function SafetyPage({
               max={220}
               value={symptom?.measuredHeartRateBpm ?? ''}
               placeholder="76"
-              onChange={(e) =>
-                updateSymptomField(
-                  'measuredHeartRateBpm',
-                  e.target.value === '' ? undefined : Number(e.target.value),
-                )
-              }
+              onChange={(e) => {
+                const rawVal = e.target.value;
+                if (rawVal === '') {
+                  updateSymptomField('measuredHeartRateBpm', undefined);
+                  return;
+                }
+                const parsed = Number(rawVal);
+                if (Number.isFinite(parsed)) {
+                  updateSymptomField('measuredHeartRateBpm', parsed);
+                }
+              }}
               className="w-full px-3 py-2 rounded-xl bg-surface-subtle border border-border text-sm font-bold text-ink"
             />
           </div>
@@ -542,9 +449,12 @@ export function SafetyPage({
               min={0}
               max={240}
               value={symptom?.onsetHoursAgo ?? 1}
-              onChange={(e) =>
-                updateSymptomField('onsetHoursAgo', Number(e.target.value))
-              }
+              onChange={(e) => {
+                const parsed = e.target.value === '' ? 0 : Number(e.target.value);
+                if (Number.isFinite(parsed)) {
+                  updateSymptomField('onsetHoursAgo', Math.max(0, parsed));
+                }
+              }}
               className="w-full px-3 py-2 rounded-xl bg-surface-subtle border border-border text-sm font-bold text-ink"
             />
           </div>

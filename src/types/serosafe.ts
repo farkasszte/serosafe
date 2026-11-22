@@ -105,6 +105,7 @@ export interface ObservableSymptomFlags {
   hasHeavySweating: boolean;
   hasSevereRestlessnessOrConfusion: boolean;
   hasGIDistress: boolean;
+  hasRestingTachycardia?: boolean;
 }
 
 export interface BodySensation {
@@ -161,13 +162,8 @@ export type EmotionQuadrant = 'calm' | 'low' | 'tense' | 'wired';
 export interface EmotionWheelNode {
   id: string;
   quadrant: EmotionQuadrant;
-  ring: 'core' | 'nuance';
   labelHu: string;
   labelEn: string;
-  descriptionHu: string;
-  descriptionEn: string;
-  angleStartDeg: number;
-  angleEndDeg: number;
   score: {
     mood?: number;
     energy?: number;
@@ -192,8 +188,8 @@ export interface HabitChip {
   labelHu: string;
   labelEn: string;
   intent: IntentTag;
-  onGraph: boolean;
-  count: number;
+  onGraph?: boolean;
+  count?: number;
 }
 
 export interface DailyLogEntry {

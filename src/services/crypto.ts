@@ -4,12 +4,16 @@ export interface EncryptedPayload {
 }
 
 export interface PinLockConfig {
+  version?: 2;
   salt: string;
-  pinHash: string;
   iterations: number;
+  verifier?: EncryptedPayload;
+  /** Legacy v1 field kept only for backwards compatibility on read */
+  pinHash?: string;
 }
 
 const DEFAULT_ITERATIONS = 150_000;
+const PIN_VERIFIER_TAG = 'serosafe-pin-v2';
 
 function getSubtle(): SubtleCrypto {
   const subtle = globalThis.crypto?.subtle;
@@ -20,11 +24,13 @@ function getSubtle(): SubtleCrypto {
 }
 
 export function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunkSize = 0x8000;
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize);
+    chunks.push(String.fromCharCode(...slice));
   }
-  return btoa(binary);
+  return btoa(chunks.join(''));
 }
 
 export function base64ToUint8(base64: string): Uint8Array<ArrayBuffer> {
@@ -99,12 +105,10 @@ export async function createPinConfig(pin: string): Promise<{
 }> {
   const salt = generateSaltBase64();
   const iterations = DEFAULT_ITERATIONS;
-  const [pinHash, key] = await Promise.all([
-    hashPin(pin, salt, iterations),
-    deriveAesKeyFromPin(pin, salt, iterations),
-  ]);
+  const key = await deriveAesKeyFromPin(pin, salt, iterations);
+  const verifier = await encryptJSON({ v: PIN_VERIFIER_TAG }, key);
   return {
-    config: { salt, pinHash, iterations },
+    config: { version: 2, salt, iterations, verifier },
     key,
   };
 }
@@ -113,11 +117,26 @@ export async function verifyPinAndDeriveKey(
   pin: string,
   config: PinLockConfig,
 ): Promise<CryptoKey | null> {
-  const candidateHash = await hashPin(pin, config.salt, config.iterations);
-  if (candidateHash !== config.pinHash) {
-    return null;
+  if (config.verifier) {
+    try {
+      const key = await deriveAesKeyFromPin(pin, config.salt, config.iterations);
+      const decoded = await decryptJSON<{ v?: string }>(config.verifier, key);
+      return decoded?.v === PIN_VERIFIER_TAG ? key : null;
+    } catch {
+      return null;
+    }
   }
-  return deriveAesKeyFromPin(pin, config.salt, config.iterations);
+
+  // Legacy v1 compatibility for already-configured vaults
+  if (config.pinHash) {
+    const candidateHash = await hashPin(pin, config.salt, config.iterations);
+    if (candidateHash !== config.pinHash) {
+      return null;
+    }
+    return deriveAesKeyFromPin(pin, config.salt, config.iterations);
+  }
+
+  return null;
 }
 
 export async function encryptJSON<T>(

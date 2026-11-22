@@ -9,11 +9,22 @@ import {
   PAIN_QUALITIES,
 } from '@/data/substances';
 import {
+  computeExplainablePatterns,
   evaluateRiskAndSymptoms,
   normalizeMedicationsForDate,
   prioritizeMedicationsForEmergency,
 } from '@/engine/safetyEngine';
-import { createCleanDataset, createDemoDataset } from '@/services/demoData';
+import {
+  applySensationToggle,
+  applySymptomFieldUpdate,
+  mapFlagsFromSensations,
+} from '@/engine/symptomSync';
+import { validateImportedState } from '@/services/backup';
+import {
+  createCleanDataset,
+  createDemoDataset,
+  DEFAULT_COMMUNICATION_PROFILE,
+} from '@/services/demoData';
 import {
   formatAssessmentLevel,
   formatDrugClass,
@@ -21,7 +32,13 @@ import {
   formatMedStatus,
   STRINGS,
 } from '@/services/i18n';
-import type { ObservableSymptomEntry, UserMedication } from '@/types/serosafe';
+import { buildCrisisSpeechText } from '@/services/tts';
+import type {
+  DailyLogEntry,
+  ObservableSymptomEntry,
+  UserMedication,
+} from '@/types/serosafe';
+import { daysBetweenDateKeys } from '@/utils/date';
 
 const NOW = new Date('2026-11-21T12:00:00Z');
 
@@ -383,5 +400,181 @@ describe('Anatomical separation (Mouth vs Throat & CHOIR views)', () => {
       'm_ari',
       'm_mel',
     ]);
+  });
+
+  it('escalates chest_racing / resting tachycardia, reports accurate hasNmsOrSepsisConcern, and catches duplicate candidate substances', () => {
+    const mapped = mapFlagsFromSensations(['chest_racing']);
+    expect(mapped.hasRestingTachycardia).toBe(true);
+
+    const consultRes = evaluateRiskAndSymptoms(
+      [],
+      CURATED_SUBSTANCES,
+      makeSymptom({ hasRestingTachycardia: true }),
+      undefined,
+      NOW,
+    );
+    expect(consultRes.level).toBe('CONSULT');
+    expect(consultRes.hasNmsOrSepsisConcern).toBe(false);
+
+    // Serotonergic tremor + heavy sweating without fever triggers 112 without falsely flagging NMS/sepsis
+    const sertraline = makeMed({
+      id: 'm_sert',
+      substanceId: 'sertraline',
+      customName: 'Szertralin',
+    });
+    const seroClusterRes = evaluateRiskAndSymptoms(
+      [sertraline],
+      CURATED_SUBSTANCES,
+      makeSymptom({ hasTremor: true, hasHeavySweating: true }),
+      undefined,
+      NOW,
+    );
+    expect(seroClusterRes.level).toBe('CALL_EMERGENCY_112');
+    expect(seroClusterRes.hasNmsOrSepsisConcern).toBe(false);
+
+    // Fever >= 38.0 + severe tachycardia >= 130 triggers 112 with NMS/sepsis concern
+    const feverTachyRes = evaluateRiskAndSymptoms(
+      [],
+      CURATED_SUBSTANCES,
+      makeSymptom({ measuredTempCelsius: 38.2, measuredHeartRateBpm: 134 }),
+      undefined,
+      NOW,
+    );
+    expect(feverTachyRes.level).toBe('CALL_EMERGENCY_112');
+    expect(feverTachyRes.hasNmsOrSepsisConcern).toBe(true);
+
+    // Duplicate ingredient test: already taking sertraline and testing sertraline again
+    const dupRes = evaluateRiskAndSymptoms(
+      [sertraline],
+      CURATED_SUBSTANCES,
+      undefined,
+      'sertraline',
+      NOW,
+    );
+    expect(dupRes.level).toBe('CONSULT');
+    expect(dupRes.activeSerotonergicCount).toBe(1);
+    expect(dupRes.hasContraindicatedMAOI).toBe(false);
+    expect(
+      dupRes.summaryReasonsHu.some((r) => r.includes('Duplikált hatóanyag-kockázat')),
+    ).toBe(true);
+  });
+
+  it('only pairs consecutive calendar days in computeExplainablePatterns across gaps', () => {
+    const makeDay = (date: string, sleepHours: number, energyLevel: number): DailyLogEntry => ({
+      date,
+      isGap: false,
+      dayPartsLogged: ['now'],
+      emotions: [],
+      energyLevel,
+      sensoryBattery: 70,
+      sleepHours,
+      wokeAtNight: false,
+      bodyRegions: [],
+      bodySensations: [],
+      chipIds: [],
+      note: '',
+      addedLater: false,
+      medsTakenPct: 100,
+    });
+
+    expect(daysBetweenDateKeys('2026-11-10', '2026-11-11')).toBe(1);
+    expect(daysBetweenDateKeys('2026-11-10', '2026-11-12')).toBe(2);
+
+    // Short sleep on 10th and 13th, with missing days 11th and 14th -> NOT next-day pairs
+    const gappedLogs: DailyLogEntry[] = [
+      makeDay('2026-11-10', 4.5, 70),
+      makeDay('2026-11-12', 7.5, 35),
+      makeDay('2026-11-13', 4.5, 70),
+      makeDay('2026-11-15', 7.5, 35),
+    ];
+    expect(computeExplainablePatterns(gappedLogs, []).some((p) => p.id === 'pat_sleep_energy')).toBe(false);
+
+    // True consecutive days (10->11 and 13->14)
+    const consecutiveLogs: DailyLogEntry[] = [
+      makeDay('2026-11-10', 4.5, 70),
+      makeDay('2026-11-11', 7.5, 40),
+      makeDay('2026-11-13', 4.5, 70),
+      makeDay('2026-11-14', 7.5, 40),
+    ];
+    expect(computeExplainablePatterns(consecutiveLogs, []).some((p) => p.id === 'pat_sleep_energy')).toBe(true);
+  });
+
+  it('syncs symptomSync cleanly, filters expired meds in TTS, and validates imported JSON backups', () => {
+    const emptyLog: DailyLogEntry = {
+      date: '2026-11-21',
+      isGap: false,
+      dayPartsLogged: ['now'],
+      emotions: [],
+      energyLevel: 70,
+      sensoryBattery: 70,
+      sleepHours: 7,
+      wokeAtNight: false,
+      bodyRegions: ['chest'],
+      bodySensations: [],
+      chipIds: [],
+      note: '',
+      addedLater: false,
+      medsTakenPct: null,
+    };
+
+    const toggledOn = applySensationToggle(emptyLog, 'chest_racing', 'now');
+    expect(toggledOn.bodyRegions).toEqual(['chest']);
+    expect(toggledOn.symptomEntry?.hasRestingTachycardia).toBe(true);
+
+    const toggledOff = applySensationToggle(toggledOn, 'chest_racing', 'now');
+    expect(toggledOff.symptomEntry).toBeUndefined();
+
+    const withTemp = applySymptomFieldUpdate(emptyLog, 'measuredTempCelsius', 38.4);
+    expect(withTemp.symptomEntry?.measuredTempCelsius).toBe(38.4);
+    const clearedTemp = applySymptomFieldUpdate(withTemp, 'measuredTempCelsius', undefined);
+    expect(clearedTemp.symptomEntry).toBeUndefined();
+
+    const activeSertraline = makeMed({
+      id: 'm_sert',
+      substanceId: 'sertraline',
+      customName: 'Szertralin',
+    });
+    const expiredFluo = makeMed({
+      id: 'm_fluo_old',
+      substanceId: 'fluoxetine',
+      customName: 'Régi Fluoxetin',
+      isDiscontinued: true,
+      discontinuedAtIso: '2026-08-01T08:00:00Z',
+      lastTakenIso: '2026-08-01T08:00:00Z',
+    });
+    const evalRes = evaluateRiskAndSymptoms(
+      [activeSertraline, expiredFluo],
+      CURATED_SUBSTANCES,
+      makeSymptom({ hasRestingTachycardia: true }),
+      undefined,
+      NOW,
+    );
+    const speech = buildCrisisSpeechText({
+      lang: 'hu',
+      profile: DEFAULT_COMMUNICATION_PROFILE,
+      meds: [activeSertraline, expiredFluo],
+      assessment: evalRes,
+      symptom: makeSymptom({ hasRestingTachycardia: true }),
+    });
+    expect(speech).toContain('Szertralin');
+    expect(speech).not.toContain('Régi Fluoxetin');
+    expect(speech).toContain('nyugalmi szapora szívdobogás');
+
+    expect(validateImportedState(null)).toBeNull();
+    expect(validateImportedState({ medications: [{}], dailyLogs: [] })).toBeNull();
+    expect(
+      validateImportedState({
+        medications: [],
+        dailyLogs: [{ date: 'bad-date' }],
+      }),
+    ).toBeNull();
+
+    const minimalBackup = validateImportedState({
+      medications: [{ id: 'm1', customName: 'Szertralin' }],
+      dailyLogs: [{ date: '2026-11-21' }],
+    });
+    expect(minimalBackup).not.toBeNull();
+    expect(minimalBackup?.settings.lang).toBe('hu');
+    expect(minimalBackup?.communicationProfile.barrierStatementHu.length).toBeGreaterThan(10);
   });
 });

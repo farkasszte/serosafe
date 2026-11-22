@@ -13,8 +13,12 @@ import {
 import { BodyMap } from '@/components/visuals/BodyMap';
 import { EmotionWheel } from '@/components/visuals/EmotionWheel';
 import { EnergySensoryDial } from '@/components/visuals/EnergySensoryDial';
-import { getSelectedBodyRegions } from '@/data/choirBodyRegions';
-import { BODY_SENSATIONS } from '@/data/substances';
+import {
+  applyBodyPartsUpdate,
+  applyPainLevelChange,
+  applyPainQualityToggle,
+  applySensationToggle,
+} from '@/engine/symptomSync';
 import { STRINGS } from '@/services/i18n';
 import type {
   BodyRegionId,
@@ -33,7 +37,10 @@ interface TodayPageProps {
   habits: HabitChip[];
   doctorNote: DoctorReferenceNote | null;
   onSelectDayPart: (part: DayPart) => void;
-  onUpdateTodayLog: (updater: (prev: DailyLogEntry) => DailyLogEntry) => void;
+  onUpdateTodayLog: (
+    updater: (prev: DailyLogEntry) => DailyLogEntry,
+    options?: { recomputePatterns?: boolean },
+  ) => void;
   onAddHabit: (label: string, group: HabitChip['group'], intent: IntentTag) => void;
   onDeleteHabit?: (habitId: string) => void;
 }
@@ -54,40 +61,6 @@ function isLoadFactor(chip: HabitChip): boolean {
     chip.id === 'c_fog' ||
     chip.intent === 'observation'
   );
-}
-
-function mapFlagsFromSensations(sensationIds: string[]) {
-  return {
-    hasInvoluntaryTwitching: sensationIds.some(
-      (sid) =>
-        BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-        'hasInvoluntaryTwitching',
-    ),
-    hasTremor: sensationIds.some(
-      (sid) =>
-        BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField === 'hasTremor',
-    ),
-    hasMuscleStiffness: sensationIds.some(
-      (sid) =>
-        BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-        'hasMuscleStiffness',
-    ),
-    hasHeavySweating: sensationIds.some(
-      (sid) =>
-        BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-        'hasHeavySweating',
-    ),
-    hasSevereRestlessnessOrConfusion: sensationIds.some(
-      (sid) =>
-        BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-        'hasSevereRestlessnessOrConfusion',
-    ),
-    hasGIDistress: sensationIds.some(
-      (sid) =>
-        BODY_SENSATIONS.find((s) => s.id === sid)?.mapsToField ===
-        'hasGIDistress',
-    ),
-  };
 }
 
 export function TodayPage({
@@ -132,105 +105,30 @@ export function TodayPage({
     partIds: string[],
     derivedRegions: BodyRegionId[],
   ) {
-    onUpdateTodayLog((prev) => {
-      const prunedSensations = prev.bodySensations.filter((sid) => {
-        const def = BODY_SENSATIONS.find((s) => s.id === sid);
-        return def ? derivedRegions.includes(def.region) : false;
-      });
-      const mappedFlags = mapFlagsFromSensations(prunedSensations);
-
-      return {
-        ...prev,
-        isGap: false,
-        dayPartsLogged: prev.dayPartsLogged.includes(activeDayPart)
-          ? prev.dayPartsLogged
-          : [...prev.dayPartsLogged, activeDayPart],
-        selectedBodyPartIds: partIds,
-        bodyRegions: derivedRegions,
-        bodySensations: prunedSensations,
-        painLevel: derivedRegions.length === 0 ? 0 : prev.painLevel,
-        painQualities: derivedRegions.length === 0 ? [] : prev.painQualities,
-        symptomEntry: prev.symptomEntry
-          ? {
-              ...prev.symptomEntry,
-              ...mappedFlags,
-              timestampIso: new Date().toISOString(),
-              selectedBodyRegions: derivedRegions,
-              selectedSensations: prunedSensations,
-            }
-          : prev.symptomEntry,
-      };
-    });
+    onUpdateTodayLog(
+      (prev) => applyBodyPartsUpdate(prev, partIds, derivedRegions, activeDayPart),
+      { recomputePatterns: false },
+    );
   }
 
   function handleChangePainLevel(level: number) {
-    onUpdateTodayLog((prev) => ({
-      ...prev,
-      isGap: false,
-      dayPartsLogged: prev.dayPartsLogged.includes(activeDayPart)
-        ? prev.dayPartsLogged
-        : [...prev.dayPartsLogged, activeDayPart],
-      painLevel: level,
-      painQualities: level === 0 ? [] : prev.painQualities,
-    }));
+    onUpdateTodayLog(
+      (prev) => applyPainLevelChange(prev, level, activeDayPart),
+      { recomputePatterns: false },
+    );
   }
 
   function handleTogglePainQuality(quality: PainQualityId) {
-    onUpdateTodayLog((prev) => {
-      const current = prev.painQualities ?? [];
-      const exists = current.includes(quality);
-      return {
-        ...prev,
-        isGap: false,
-        painQualities: exists
-          ? current.filter((q) => q !== quality)
-          : [...current, quality],
-      };
+    onUpdateTodayLog((prev) => applyPainQualityToggle(prev, quality), {
+      recomputePatterns: false,
     });
   }
 
   function toggleSensation(sensationId: string, _region: BodyRegionId) {
-    onUpdateTodayLog((prev) => {
-      const exists = prev.bodySensations.includes(sensationId);
-      const bodySensations = exists
-        ? prev.bodySensations.filter((id) => id !== sensationId)
-        : [...prev.bodySensations, sensationId];
-
-      const activeRegionSet = getSelectedBodyRegions(
-        prev.selectedBodyPartIds ?? [],
-        prev.bodyRegions.includes('skin'),
-      );
-
-      const prevSym = prev.symptomEntry ?? {
-        id: `sym_${prev.date}`,
-        timestampIso: new Date().toISOString(),
-        onsetHoursAgo: 1,
-        hasInvoluntaryTwitching: false,
-        hasTremor: false,
-        hasMuscleStiffness: false,
-        hasHeavySweating: false,
-        hasSevereRestlessnessOrConfusion: false,
-        hasGIDistress: false,
-        selectedBodyRegions: [],
-        selectedSensations: [],
-      };
-
-      const mappedFlags = mapFlagsFromSensations(bodySensations);
-
-      return {
-        ...prev,
-        isGap: false,
-        bodyRegions: activeRegionSet,
-        bodySensations,
-        symptomEntry: {
-          ...prevSym,
-          ...mappedFlags,
-          timestampIso: new Date().toISOString(),
-          selectedBodyRegions: activeRegionSet,
-          selectedSensations: bodySensations,
-        },
-      };
-    });
+    onUpdateTodayLog(
+      (prev) => applySensationToggle(prev, sensationId, activeDayPart),
+      { recomputePatterns: false },
+    );
   }
 
   function toggleHabit(chipId: string) {
@@ -330,16 +228,15 @@ export function TodayPage({
             {hu ? 'Mai állapot' : 'Today'}
           </h1>
 
-          {/* Dedicated "Most" row + balanced 6-slot DayPart grid */}
+          {/* Dedicated "Most" row + balanced 6-slot DayPart group */}
           <div
             className="space-y-1.5"
-            role="tablist"
+            role="group"
             aria-label={hu ? 'Napszak' : 'Part of day'}
           >
             <button
               type="button"
-              role="tab"
-              aria-selected={activeDayPart === 'now'}
+              aria-pressed={activeDayPart === 'now'}
               onClick={() => onSelectDayPart('now')}
               className={`w-full py-2 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                 activeDayPart === 'now'
@@ -358,8 +255,7 @@ export function TodayPage({
                   <button
                     key={part}
                     type="button"
-                    role="tab"
-                    aria-selected={active}
+                    aria-pressed={active}
                     onClick={() => onSelectDayPart(part)}
                     className={`py-1.5 px-2 rounded-xl text-xs text-center transition ${
                       active
@@ -469,11 +365,14 @@ export function TodayPage({
                 }))
               }
               onChangeSensory={(val) =>
-                onUpdateTodayLog((prev) => ({
-                  ...prev,
-                  isGap: false,
-                  sensoryBattery: val,
-                }))
+                onUpdateTodayLog(
+                  (prev) => ({
+                    ...prev,
+                    isGap: false,
+                    sensoryBattery: val,
+                  }),
+                  { recomputePatterns: false },
+                )
               }
               onChangeSleepHours={(val) =>
                 onUpdateTodayLog((prev) => ({
@@ -483,11 +382,14 @@ export function TodayPage({
                 }))
               }
               onToggleWokeAtNight={() =>
-                onUpdateTodayLog((prev) => ({
-                  ...prev,
-                  isGap: false,
-                  wokeAtNight: !prev.wokeAtNight,
-                }))
+                onUpdateTodayLog(
+                  (prev) => ({
+                    ...prev,
+                    isGap: false,
+                    wokeAtNight: !prev.wokeAtNight,
+                  }),
+                  { recomputePatterns: false },
+                )
               }
             />
           )}
@@ -642,11 +544,14 @@ export function TodayPage({
                   type="text"
                   value={todayLog.note}
                   onChange={(e) =>
-                    onUpdateTodayLog((prev) => ({
-                      ...prev,
-                      isGap: false,
-                      note: e.target.value,
-                    }))
+                    onUpdateTodayLog(
+                      (prev) => ({
+                        ...prev,
+                        isGap: false,
+                        note: e.target.value,
+                      }),
+                      { recomputePatterns: false },
+                    )
                   }
                   placeholder={t.notePlaceholder}
                   className="w-full px-3 py-2 rounded-xl bg-surface-subtle border border-border text-xs text-ink"
@@ -660,11 +565,14 @@ export function TodayPage({
                   type="text"
                   value={todayLog.decisionNote ?? ''}
                   onChange={(e) =>
-                    onUpdateTodayLog((prev) => ({
-                      ...prev,
-                      isGap: false,
-                      decisionNote: e.target.value,
-                    }))
+                    onUpdateTodayLog(
+                      (prev) => ({
+                        ...prev,
+                        isGap: false,
+                        decisionNote: e.target.value,
+                      }),
+                      { recomputePatterns: false },
+                    )
                   }
                   placeholder={t.decisionPlaceholder}
                   className="w-full px-3 py-2 rounded-xl bg-surface-subtle border border-border text-xs text-ink"
@@ -677,10 +585,13 @@ export function TodayPage({
                 type="checkbox"
                 checked={todayLog.addedLater}
                 onChange={(e) =>
-                  onUpdateTodayLog((prev) => ({
-                    ...prev,
-                    addedLater: e.target.checked,
-                  }))
+                  onUpdateTodayLog(
+                    (prev) => ({
+                      ...prev,
+                      addedLater: e.target.checked,
+                    }),
+                    { recomputePatterns: false },
+                  )
                 }
                 className="w-4 h-4 rounded"
               />

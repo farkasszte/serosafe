@@ -1,26 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Plus, Search, X } from 'lucide-react';
+import { ModalDialog } from '@/components/modals/ModalDialog';
 import { COMMON_CO_MEDICATIONS, CURATED_SUBSTANCES } from '@/data/substances';
 import { formatDrugClass } from '@/services/i18n';
 import type { MedicationStatus, UserMedication } from '@/types/serosafe';
-import { Plus, Search, X } from 'lucide-react';
+import { formatLocalDateKey, toDatetimeLocalValue } from '@/utils/date';
 
 type LastTakenPreset = 'not_yet' | 'now' | '2h' | 'yesterday_eve' | 'custom';
-
-function toLocalDateKey(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function toDatetimeLocalValue(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
 
 interface AddMedDialogProps {
   open: boolean;
@@ -36,7 +22,6 @@ export function AddMedDialog({
   onAddMedication,
 }: AddMedDialogProps) {
   const hu = lang === 'hu';
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
 
   const [query, setQuery] = useState('');
   const [selectedKind, setSelectedKind] = useState<'serotonergic' | 'comed' | 'custom'>('serotonergic');
@@ -46,16 +31,20 @@ export function AddMedDialog({
   const [scheduleTime, setScheduleTime] = useState('08:00');
   const [lastTakenPreset, setLastTakenPreset] = useState<LastTakenPreset>('not_yet');
   const [customTakenLocal, setCustomTakenLocal] = useState(() =>
-    toDatetimeLocalValue(new Date()),
+    toDatetimeLocalValue(),
   );
   const [isDiscontinued, setIsDiscontinued] = useState(false);
   const [stoppedDaysAgo, setStoppedDaysAgo] = useState(7);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
+    if (open) {
+      setQuery('');
+      setCustomName('');
+      setLastTakenPreset('not_yet');
+      setCustomTakenLocal(toDatetimeLocalValue());
+      setIsDiscontinued(false);
+      setStoppedDaysAgo(7);
+    }
   }, [open]);
 
   const filteredSerotonergic = useMemo(() => {
@@ -81,12 +70,30 @@ export function AddMedDialog({
     );
   }, [query]);
 
-  const activeSubstance = CURATED_SUBSTANCES.find((s) => s.id === selectedId);
-  const activeCoMed = COMMON_CO_MEDICATIONS.find((s) => s.id === selectedId);
+  // Always resolve to a currently visible match so searching never saves a hidden default drug.
+  const effectiveSubstance =
+    selectedKind === 'serotonergic'
+      ? filteredSerotonergic.find((s) => s.id === selectedId) ??
+        filteredSerotonergic[0]
+      : undefined;
+  const effectiveCoMed =
+    selectedKind === 'comed'
+      ? filteredCoMeds.find((c) => c.id === selectedId) ?? filteredCoMeds[0]
+      : undefined;
+
+  const canSubmit =
+    selectedKind === 'serotonergic'
+      ? Boolean(effectiveSubstance)
+      : selectedKind === 'comed'
+        ? Boolean(effectiveCoMed)
+        : customName.trim().length > 0;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSubmit) return;
+
     const now = new Date();
+    const safeDiscontinued = selectedKind === 'serotonergic' && isDiscontinued;
     const stoppedIso = new Date(
       now.getTime() - stoppedDaysAgo * 24 * 3600 * 1000,
     ).toISOString();
@@ -98,25 +105,25 @@ export function AddMedDialog({
     let nmsWatch = false;
     let isOTCOrSupplement = false;
 
-    if (selectedKind === 'serotonergic' && activeSubstance) {
-      substanceId = activeSubstance.id;
-      displayName = `${hu ? activeSubstance.nameHu : activeSubstance.nameEn} (${activeSubstance.examplesHu[0]})`;
-      withdrawalCaution = activeSubstance.withdrawalCaution;
-      isOTCOrSupplement = activeSubstance.isOTCOrSupplement;
-    } else if (selectedKind === 'comed' && activeCoMed) {
-      coMedId = activeCoMed.id;
-      displayName = `${hu ? activeCoMed.nameHu : activeCoMed.nameEn} (${activeCoMed.examplesHu[0]})`;
-      withdrawalCaution = activeCoMed.withdrawalCaution;
-      nmsWatch = activeCoMed.nmsWatch;
+    if (selectedKind === 'serotonergic' && effectiveSubstance) {
+      substanceId = effectiveSubstance.id;
+      displayName = `${hu ? effectiveSubstance.nameHu : effectiveSubstance.nameEn} (${effectiveSubstance.examplesHu[0]})`;
+      withdrawalCaution = effectiveSubstance.withdrawalCaution;
+      isOTCOrSupplement = effectiveSubstance.isOTCOrSupplement;
+    } else if (selectedKind === 'comed' && effectiveCoMed) {
+      coMedId = effectiveCoMed.id;
+      displayName = `${hu ? effectiveCoMed.nameHu : effectiveCoMed.nameEn} (${effectiveCoMed.examplesHu[0]})`;
+      withdrawalCaution = effectiveCoMed.withdrawalCaution;
+      nmsWatch = effectiveCoMed.nmsWatch;
     }
 
     if (!displayName) return;
 
-    const todayKey = toLocalDateKey(now);
+    const todayKey = formatLocalDateKey(now);
     let activeLastTakenIso = '';
     let activeTodayStatus: MedicationStatus = 'PENDING';
 
-    if (!isDiscontinued) {
+    if (!safeDiscontinued) {
       if (lastTakenPreset === 'now') {
         activeLastTakenIso = now.toISOString();
         activeTodayStatus = 'TOOK';
@@ -124,7 +131,7 @@ export function AddMedDialog({
         const twoHoursAgo = new Date(now.getTime() - 2 * 3600 * 1000);
         activeLastTakenIso = twoHoursAgo.toISOString();
         activeTodayStatus =
-          toLocalDateKey(twoHoursAgo) === todayKey ? 'TOOK' : 'PENDING';
+          formatLocalDateKey(twoHoursAgo) === todayKey ? 'TOOK' : 'PENDING';
       } else if (lastTakenPreset === 'yesterday_eve') {
         const yest = new Date(now);
         yest.setDate(yest.getDate() - 1);
@@ -136,7 +143,7 @@ export function AddMedDialog({
         if (!Number.isNaN(parsed.getTime())) {
           activeLastTakenIso = parsed.toISOString();
           activeTodayStatus =
-            toLocalDateKey(parsed) === todayKey ? 'TOOK' : 'PENDING';
+            formatLocalDateKey(parsed) === todayKey ? 'TOOK' : 'PENDING';
         }
       }
     }
@@ -147,15 +154,11 @@ export function AddMedDialog({
       coMedId,
       customName: displayName,
       doseText: doseText.trim() || '1 db',
-      scheduleTime: isDiscontinued
-        ? hu
-          ? `Leállítva ${stoppedDaysAgo} napja`
-          : `Stopped ${stoppedDaysAgo}d ago`
-        : scheduleTime,
-      lastTakenIso: isDiscontinued ? stoppedIso : activeLastTakenIso,
-      discontinuedAtIso: isDiscontinued ? stoppedIso : undefined,
-      isDiscontinued,
-      todayStatus: isDiscontinued ? 'SKIPPED' : activeTodayStatus,
+      scheduleTime: safeDiscontinued ? '' : scheduleTime,
+      lastTakenIso: safeDiscontinued ? stoppedIso : activeLastTakenIso,
+      discontinuedAtIso: safeDiscontinued ? stoppedIso : undefined,
+      isDiscontinued: safeDiscontinued,
+      todayStatus: safeDiscontinued ? 'SKIPPED' : activeTodayStatus,
       todayStatusDate: todayKey,
       withdrawalCaution,
       nmsWatch,
@@ -164,22 +167,14 @@ export function AddMedDialog({
       skipHistoryEn: 'No skipped-dose history logged for this item yet.',
     });
 
-    setCustomName('');
-    setLastTakenPreset('not_yet');
     onClose();
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) onClose();
-      }}
-      aria-labelledby="add-med-title"
+    <ModalDialog
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="add-med-title"
       className="serosafe-dialog w-[min(100vw-24px,560px)] max-h-[90dvh] rounded-3xl overflow-hidden"
     >
       <form
@@ -218,25 +213,28 @@ export function AddMedDialog({
               },
               { key: 'custom', hu: 'Egyéni név', en: 'Custom' },
             ] as const
-          ).map((t) => (
+          ).map((tab) => (
             <button
-              key={t.key}
+              key={tab.key}
               type="button"
               onClick={() => {
-                setSelectedKind(t.key);
-                if (t.key === 'serotonergic' && filteredSerotonergic[0]) {
+                setSelectedKind(tab.key);
+                if (tab.key !== 'serotonergic') {
+                  setIsDiscontinued(false);
+                }
+                if (tab.key === 'serotonergic' && filteredSerotonergic[0]) {
                   setSelectedId(filteredSerotonergic[0].id);
-                } else if (t.key === 'comed' && filteredCoMeds[0]) {
+                } else if (tab.key === 'comed' && filteredCoMeds[0]) {
                   setSelectedId(filteredCoMeds[0].id);
                 }
               }}
               className={`py-2 px-2 rounded-lg text-xs font-semibold transition ${
-                selectedKind === t.key
+                selectedKind === tab.key
                   ? 'bg-surface text-ink border border-border shadow-xs'
                   : 'text-ink-muted hover:text-ink'
               }`}
             >
-              {hu ? t.hu : t.en}
+              {hu ? tab.hu : tab.en}
             </button>
           ))}
         </div>
@@ -262,9 +260,10 @@ export function AddMedDialog({
             </div>
 
             <div className="max-h-48 overflow-y-auto calm-scroll space-y-1.5 pr-1">
-              {selectedKind === 'serotonergic'
-                ? filteredSerotonergic.map((s) => {
-                    const active = selectedId === s.id;
+              {selectedKind === 'serotonergic' ? (
+                filteredSerotonergic.length > 0 ? (
+                  filteredSerotonergic.map((s) => {
+                    const active = effectiveSubstance?.id === s.id;
                     return (
                       <button
                         key={s.id}
@@ -293,35 +292,80 @@ export function AddMedDialog({
                       </button>
                     );
                   })
-                : filteredCoMeds.map((c) => {
-                    const active = selectedId === c.id;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setSelectedId(c.id)}
-                        className={`w-full text-left p-2.5 rounded-xl border transition ${
-                          active
-                            ? 'bg-accent-soft border-accent text-ink'
-                            : 'bg-surface border-border hover:border-border-strong'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-ink">
-                            {hu ? c.nameHu : c.nameEn} ({c.examplesHu.join(', ')})
+                ) : (
+                  <div className="p-3 rounded-xl bg-surface-subtle border border-border text-xs text-ink-muted space-y-2 text-center">
+                    <p>
+                      {hu
+                        ? 'Nincs találat a 30 tételes kurált listában.'
+                        : 'No matches in the curated serotonergic list.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomName(query.trim());
+                        setSelectedKind('custom');
+                        setIsDiscontinued(false);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-surface border border-border text-ink font-semibold"
+                    >
+                      {hu
+                        ? `Felvétel egyéni névként: „${query.trim()}”`
+                        : `Use custom name: "${query.trim()}"`}
+                    </button>
+                  </div>
+                )
+              ) : filteredCoMeds.length > 0 ? (
+                filteredCoMeds.map((c) => {
+                  const active = effectiveCoMed?.id === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedId(c.id)}
+                      className={`w-full text-left p-2.5 rounded-xl border transition ${
+                        active
+                          ? 'bg-accent-soft border-accent text-ink'
+                          : 'bg-surface border-border hover:border-border-strong'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-ink">
+                          {hu ? c.nameHu : c.nameEn} ({c.examplesHu.join(', ')})
+                        </span>
+                        {c.nmsWatch && (
+                          <span className="text-xs font-semibold text-warning-ink">
+                            {hu ? 'NMS-figyelés' : 'NMS watch'}
                           </span>
-                          {c.nmsWatch && (
-                            <span className="text-xs font-semibold text-warning-ink">
-                              {hu ? 'NMS-figyelés' : 'NMS watch'}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-ink-muted mt-0.5">
-                          {hu ? c.notesHu : c.notesEn}
-                        </p>
-                      </button>
-                    );
-                  })}
+                        )}
+                      </div>
+                      <p className="text-xs text-ink-muted mt-0.5">
+                        {hu ? c.notesHu : c.notesEn}
+                      </p>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-3 rounded-xl bg-surface-subtle border border-border text-xs text-ink-muted space-y-2 text-center">
+                  <p>
+                    {hu
+                      ? 'Nincs találat ebben a csoportban.'
+                      : 'No matches in this category.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomName(query.trim());
+                      setSelectedKind('custom');
+                      setIsDiscontinued(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-surface border border-border text-ink font-semibold"
+                  >
+                    {hu
+                      ? `Felvétel egyéni névként: „${query.trim()}”`
+                      : `Use custom name: "${query.trim()}"`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -360,7 +404,7 @@ export function AddMedDialog({
             <input
               type="time"
               value={scheduleTime}
-              disabled={isDiscontinued}
+              disabled={selectedKind === 'serotonergic' && isDiscontinued}
               onChange={(e) => setScheduleTime(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-surface-subtle border border-border text-sm text-ink disabled:opacity-50"
             />
@@ -368,7 +412,7 @@ export function AddMedDialog({
         </div>
 
         {/* Last taken timestamp for active / OTC medications */}
-        {!isDiscontinued && (
+        {!(selectedKind === 'serotonergic' && isDiscontinued) && (
           <div className="p-2.5 @[480px]:p-3 rounded-xl @[480px]:rounded-2xl bg-surface-subtle border border-border space-y-2">
             <label className="block text-xs font-semibold text-ink">
               {hu ? 'Utolsó bevétel időpontja' : 'Last taken time'}
@@ -410,38 +454,40 @@ export function AddMedDialog({
           </div>
         )}
 
-        {/* Already Discontinued (Washout tracking) */}
-        <div className="p-2.5 @[480px]:p-3 rounded-xl @[480px]:rounded-2xl bg-surface-subtle border border-border space-y-2">
-          <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-ink">
-            <input
-              type="checkbox"
-              checked={isDiscontinued}
-              onChange={(e) => setIsDiscontinued(e.target.checked)}
-              className="w-4 h-4 rounded"
-            />
-            {hu
-              ? 'Már abbahagytam — kövesse a kiürülési időszakot'
-              : 'Already discontinued — track clinical washout window'}
-          </label>
-
-          {isDiscontinued && (
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <span className="text-xs text-ink-muted">
-                {hu ? 'Hány napja hagytad abba?' : 'Days since last dose:'}
-              </span>
+        {/* Already Discontinued (Washout tracking — applicable only to curated serotonergic substances) */}
+        {selectedKind === 'serotonergic' && (
+          <div className="p-2.5 @[480px]:p-3 rounded-xl @[480px]:rounded-2xl bg-surface-subtle border border-border space-y-2">
+            <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-ink">
               <input
-                type="number"
-                min={0}
-                max={60}
-                value={stoppedDaysAgo}
-                onChange={(e) =>
-                  setStoppedDaysAgo(Math.max(0, Number(e.target.value)))
-                }
-                className="w-24 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-sm font-bold text-ink tabular-nums"
+                type="checkbox"
+                checked={isDiscontinued}
+                onChange={(e) => setIsDiscontinued(e.target.checked)}
+                className="w-4 h-4 rounded"
               />
-            </div>
-          )}
-        </div>
+              {hu
+                ? 'Már abbahagytam — kövesse a kiürülési időszakot'
+                : 'Already discontinued — track clinical washout window'}
+            </label>
+
+            {isDiscontinued && (
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <span className="text-xs text-ink-muted">
+                  {hu ? 'Hány napja hagytad abba?' : 'Days since last dose:'}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={stoppedDaysAgo}
+                  onChange={(e) =>
+                    setStoppedDaysAgo(Math.max(0, Number(e.target.value) || 0))
+                  }
+                  className="w-24 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-sm font-bold text-ink tabular-nums"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button
@@ -453,13 +499,14 @@ export function AddMedDialog({
           </button>
           <button
             type="submit"
-            className="px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-ink-on-accent text-xs font-bold inline-flex items-center gap-1.5"
+            disabled={!canSubmit}
+            className="px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-ink-on-accent text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
             {hu ? 'Mentés a listába' : 'Save medication'}
           </button>
         </div>
       </form>
-    </dialog>
+    </ModalDialog>
   );
 }

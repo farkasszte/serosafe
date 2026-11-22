@@ -330,7 +330,7 @@ export function BodyMap({
                   aria-label={hu ? seg.labelHu : seg.labelEn}
                   aria-pressed={isSelected}
                   onKeyDown={(e) => handleSegmentKey(e, seg)}
-                  className="cursor-crosshair transition-colors duration-100 focus:outline-none"
+                  className="cursor-crosshair transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
                 />
               );
             })}

@@ -8,12 +8,30 @@ import type {
   UserMedication,
 } from '@/types/serosafe';
 import { computeExplainablePatterns } from '@/engine/safetyEngine';
+import { formatLocalDateKey } from '@/utils/date';
 
-export function formatIsoDateLocal(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export { formatLocalDateKey as formatIsoDateLocal };
+
+export function createEmptyDailyLog(dateKey: string): DailyLogEntry {
+  return {
+    date: dateKey,
+    isGap: false,
+    dayPartsLogged: ['now'],
+    emotions: [],
+    energyLevel: 65,
+    sensoryBattery: 70,
+    sleepHours: 7,
+    wokeAtNight: false,
+    bodyRegions: [],
+    bodySensations: [],
+    selectedBodyPartIds: [],
+    painLevel: 0,
+    painQualities: [],
+    chipIds: [],
+    note: '',
+    addedLater: false,
+    medsTakenPct: null,
+  };
 }
 
 export function getDaysAgoIso(daysAgo: number, hour = 8): string {
@@ -117,18 +135,22 @@ export const DEFAULT_COMMUNICATION_PROFILE: CommunicationProfile = {
   emergencyContactPhone: '+36 30 000 0000',
 };
 
-export const DEMO_DOCTOR_NOTE: DoctorReferenceNote = {
-  authorLabelHu: 'Kezelőorvosi támogató jegyzet',
-  authorLabelEn: 'Clinician supportive note',
-  dateIso: getDaysAgoIso(4, 14).slice(0, 10),
-  noteHu:
-    'A korábbi naplókban a 6 óránál rövidebb alvás és a 14:00 utáni koffein gyakran együtt járt az esti nyugtalansággal. Ez csak tájékoztató megfigyelés, nem adagolási utasítás.',
-  noteEn:
-    'In earlier logs, sleep under 6 hours and caffeine after 14:00 frequently co-occurred with evening restlessness. Reference observation only — not a dosing order.',
-};
+export function createDemoDoctorNote(): DoctorReferenceNote {
+  const d = new Date();
+  d.setDate(d.getDate() - 4);
+  return {
+    authorLabelHu: 'Kezelőorvosi támogató jegyzet',
+    authorLabelEn: 'Clinician supportive note',
+    dateIso: formatLocalDateKey(d),
+    noteHu:
+      'A korábbi naplókban a 6 óránál rövidebb alvás és a 14:00 utáni koffein gyakran együtt járt az esti nyugtalansággal. Ez csak tájékoztató megfigyelés, nem adagolási utasítás.',
+    noteEn:
+      'In earlier logs, sleep under 6 hours and caffeine after 14:00 frequently co-occurred with evening restlessness. Reference observation only — not a dosing order.',
+  };
+}
 
 export function createDemoMedications(): UserMedication[] {
-  const todayKey = formatIsoDateLocal(new Date());
+  const todayKey = formatLocalDateKey(new Date());
   return [
     {
       id: 'med_sertraline',
@@ -203,7 +225,7 @@ export function createDemoLogs(): DailyLogEntry[] {
   for (let daysAgo = 44; daysAgo >= 0; daysAgo--) {
     const d = new Date(today);
     d.setDate(today.getDate() - daysAgo);
-    const dateKey = formatIsoDateLocal(d);
+    const dateKey = formatLocalDateKey(d);
 
     // Természetes szünetek (Gap napok, sosem piros hiba)
     const isGap = daysAgo === 38 || daysAgo === 29 || daysAgo === 19 || daysAgo === 9;
@@ -334,7 +356,7 @@ export function createDemoDataset(
     dailyLogs,
     habits,
   );
-  const todayKey = formatIsoDateLocal(new Date());
+  const todayKey = formatLocalDateKey(new Date());
 
   return {
     settings: {
@@ -351,8 +373,8 @@ export function createDemoDataset(
     dailyLogs,
     habits,
     patterns,
-    communicationProfile: { ...DEFAULT_COMMUNICATION_PROFILE },
-    doctorNote: { ...DEMO_DOCTOR_NOTE },
+    communicationProfile: structuredClone(DEFAULT_COMMUNICATION_PROFILE),
+    doctorNote: createDemoDoctorNote(),
     selectedDate: todayKey,
     activeDayPart: 'now',
   };
@@ -362,7 +384,7 @@ export function createCleanDataset(
   lang: 'hu' | 'en' = 'hu',
   theme: 'light' | 'dark' = 'light',
 ): SeroSafeState {
-  const todayKey = formatIsoDateLocal(new Date());
+  const todayKey = formatLocalDateKey(new Date());
   return {
     settings: {
       lang,
@@ -375,30 +397,10 @@ export function createCleanDataset(
       profileMode: 'clean',
     },
     medications: [],
-    dailyLogs: [
-      {
-        date: todayKey,
-        isGap: false,
-        dayPartsLogged: ['now'],
-        emotions: [],
-        energyLevel: 65,
-        sensoryBattery: 70,
-        sleepHours: 7,
-        wokeAtNight: false,
-        bodyRegions: [],
-        bodySensations: [],
-        selectedBodyPartIds: [],
-        painLevel: 0,
-        painQualities: [],
-        chipIds: [],
-        note: '',
-        addedLater: false,
-        medsTakenPct: null,
-      },
-    ],
+    dailyLogs: [createEmptyDailyLog(todayKey)],
     habits: DEFAULT_HABITS.map((h) => ({ ...h, count: 0 })),
     patterns: [],
-    communicationProfile: { ...DEFAULT_COMMUNICATION_PROFILE },
+    communicationProfile: structuredClone(DEFAULT_COMMUNICATION_PROFILE),
     doctorNote: null,
     selectedDate: todayKey,
     activeDayPart: 'now',
@@ -411,7 +413,7 @@ export function createCleanDataset(
  * hogy azonnal bemutatható legyen a 112 eszkaláció és a MIST Kríziskártya.
  */
 export function applyCrisisDemoPreset(state: SeroSafeState): SeroSafeState {
-  const todayKey = formatIsoDateLocal(new Date());
+  const todayKey = formatLocalDateKey(new Date());
   const hasDxm = state.medications.some(
     (m) => m.substanceId === 'dextromethorphan',
   );
@@ -449,6 +451,7 @@ export function applyCrisisDemoPreset(state: SeroSafeState): SeroSafeState {
     hasHeavySweating: true,
     hasSevereRestlessnessOrConfusion: true,
     hasGIDistress: false,
+    hasRestingTachycardia: true,
     selectedBodyRegions: ['legs', 'arms', 'skin', 'chest', 'head'] as DailyLogEntry['bodyRegions'],
     selectedSensations: [
       'legs_twitch',
@@ -460,6 +463,18 @@ export function applyCrisisDemoPreset(state: SeroSafeState): SeroSafeState {
     ],
   };
 
+  const crisisEmotions = ['em_overwhelmed', 'em_agitated'];
+  const crisisWillcox = ['w_overwhelmed', 'w_anxious', 'w_critical'];
+  const crisisParts = [
+    'f_head_upper',
+    'f_chest_l',
+    'f_chest_r',
+    'f_forearm_l',
+    'f_forearm_r',
+    'f_shin_l',
+    'f_shin_r',
+  ];
+
   const existingIdx = state.dailyLogs.findIndex((l) => l.date === todayKey);
   const nextLogs = [...state.dailyLogs];
 
@@ -469,46 +484,28 @@ export function applyCrisisDemoPreset(state: SeroSafeState): SeroSafeState {
       isGap: false,
       bodyRegions: crisisSymptom.selectedBodyRegions,
       bodySensations: crisisSymptom.selectedSensations,
-      selectedBodyPartIds: [
-        'f_head_upper',
-        'f_chest_l',
-        'f_chest_r',
-        'f_forearm_l',
-        'f_forearm_r',
-        'f_shin_l',
-        'f_shin_r',
-      ],
+      selectedBodyPartIds: crisisParts,
       painLevel: 7,
       painQualities: ['cramping', 'pressing'],
-      emotions: ['em_overwhelmed', 'em_agitated'],
+      emotions: crisisEmotions,
+      emotionModelData: { willcox: crisisWillcox },
       symptomEntry: crisisSymptom,
     };
   } else {
     nextLogs.push({
-      date: todayKey,
-      isGap: false,
-      dayPartsLogged: ['now'],
-      emotions: ['em_overwhelmed', 'em_agitated'],
+      ...createEmptyDailyLog(todayKey),
+      emotions: crisisEmotions,
+      emotionModelData: { willcox: crisisWillcox },
       energyLevel: 35,
       sensoryBattery: 20,
       sleepHours: 5.5,
       wokeAtNight: true,
       bodyRegions: crisisSymptom.selectedBodyRegions,
       bodySensations: crisisSymptom.selectedSensations,
-      selectedBodyPartIds: [
-        'f_head_upper',
-        'f_chest_l',
-        'f_chest_r',
-        'f_forearm_l',
-        'f_forearm_r',
-        'f_shin_l',
-        'f_shin_r',
-      ],
+      selectedBodyPartIds: crisisParts,
       painLevel: 7,
       painQualities: ['cramping', 'pressing'],
-      chipIds: [],
       note: 'Akut krízis szimuláció rögzítve.',
-      addedLater: false,
       medsTakenPct: 100,
       symptomEntry: crisisSymptom,
     });

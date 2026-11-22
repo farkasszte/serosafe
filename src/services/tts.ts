@@ -1,3 +1,4 @@
+import { prioritizeMedicationsForEmergency } from '@/engine/safetyEngine';
 import { formatLastTaken } from '@/services/i18n';
 import type {
   CommunicationProfile,
@@ -20,7 +21,9 @@ export function buildCrisisSpeechText(params: {
     ? profile.barrierStatementHu
     : profile.barrierStatementEn;
 
-  const medParts = meds.map((m) => {
+  const relevantMeds = prioritizeMedicationsForEmergency(meds, assessment);
+
+  const medParts = relevantMeds.map((m) => {
     const exp = assessment.exposures.find((e) => e.medicationId === m.id);
     if (m.isDiscontinued && exp?.isInWashoutWindow) {
       return hu
@@ -63,6 +66,9 @@ export function buildCrisisSpeechText(params: {
   }
   if (symptom?.hasTremor) {
     vitalsParts.push(hu ? 'kéz- vagy végtagremegés' : 'tremor');
+  }
+  if (symptom?.hasRestingTachycardia) {
+    vitalsParts.push(hu ? 'nyugalmi szapora szívdobogás' : 'fast heartbeat at rest');
   }
   if (symptom?.hasHeavySweating) {
     vitalsParts.push(hu ? 'nyugalmi erős izzadás' : 'heavy sweating at rest');

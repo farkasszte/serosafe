@@ -76,7 +76,7 @@ export function MedsPage({
       </section>
 
       {/* Active Medications as one calm flat divided list */}
-      <section className="bg-surface border-y border-border @lg:border @lg:rounded-3xl overflow-hidden">
+      <section className="bg-surface border-y border-border @lg:border @lg:rounded-3xl">
         {activeMeds.length === 0 ? (
           <div className="p-6 text-center space-y-3">
             <p className="text-xs text-ink-muted">{t.emptyMeds}</p>
@@ -113,7 +113,8 @@ export function MedsPage({
                         )}
                       </div>
                       <p className="text-xs text-ink-muted tabular-nums">
-                        {med.doseText} • {med.scheduleTime}
+                        {med.doseText}
+                        {med.scheduleTime ? ` • ${med.scheduleTime}` : ''}
                         {med.lastTakenIso
                           ? ` • ${hu ? 'Utolsó' : 'Last'}: ${formatLastTaken(med.lastTakenIso, lang)}`
                           : ''}
@@ -131,14 +132,24 @@ export function MedsPage({
                       <div className="absolute right-0 mt-1 w-48 bg-surface border border-border rounded-2xl shadow-md p-1.5 z-20 space-y-1">
                         <button
                           type="button"
-                          onClick={() => onToggleDiscontinued(med.id)}
+                          onClick={(e) => {
+                            e.currentTarget
+                              .closest('details')
+                              ?.removeAttribute('open');
+                            onToggleDiscontinued(med.id);
+                          }}
                           className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-ink hover:bg-surface-subtle"
                         >
                           {t.stopTracking}
                         </button>
                         <button
                           type="button"
-                          onClick={() => onDeleteMedication(med.id)}
+                          onClick={(e) => {
+                            e.currentTarget
+                              .closest('details')
+                              ?.removeAttribute('open');
+                            onDeleteMedication(med.id);
+                          }}
                           className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-emergency hover:bg-emergency-soft inline-flex items-center gap-1.5"
                         >
                           <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -278,6 +289,11 @@ export function MedsPage({
                   <button
                     type="button"
                     onClick={() => onDeleteMedication(med.id)}
+                    aria-label={
+                      hu
+                        ? `${med.customName} eltávolítása`
+                        : `Remove ${med.customName}`
+                    }
                     className="p-2 rounded-xl text-ink-muted hover:text-emergency"
                   >
                     <Trash2 className="w-4 h-4" aria-hidden="true" />

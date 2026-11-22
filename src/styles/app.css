@@ -227,9 +227,14 @@ dialog.serosafe-crisis-dialog::backdrop {
 }
 
 @media print {
+  :root,
+  html[data-theme='dark'] {
+    color-scheme: light;
+  }
+
   body {
-    background: var(--color-surface) !important;
-    color: var(--color-crisis-bg) !important;
+    background: var(--color-print-bg) !important;
+    color: var(--color-print-ink) !important;
   }
 
   #app-root-shell,
@@ -241,8 +246,8 @@ dialog.serosafe-crisis-dialog::backdrop {
     display: block !important;
     width: 100%;
     padding: 16px;
-    background: var(--color-surface) !important;
-    color: var(--color-crisis-bg) !important;
+    background: var(--color-print-bg) !important;
+    color: var(--color-print-ink) !important;
     font-size: 12px;
     line-height: 1.45;
   }

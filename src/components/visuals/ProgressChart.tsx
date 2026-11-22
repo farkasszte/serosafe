@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { EMOTION_WHEEL_NODES } from '@/data/substances';
 import type { DailyLogEntry } from '@/types/serosafe';
+import { formatLocalDateKey } from '@/utils/date';
 
 interface ProgressChartProps {
   lang: 'hu' | 'en';
@@ -18,12 +19,15 @@ interface MetricConfig {
   extract: (log: DailyLogEntry) => number | null;
 }
 
+const EMOTION_NODE_BY_ID = new Map(
+  EMOTION_WHEEL_NODES.map((n) => [n.id, n]),
+);
+
 function computeMoodScore(log: DailyLogEntry): number | null {
-  if (log.isGap) return null;
-  if (log.emotions.length === 0) return 60;
+  if (log.isGap || log.emotions.length === 0) return null;
   let score = 62;
   for (const id of log.emotions) {
-    const node = EMOTION_WHEEL_NODES.find((n) => n.id === id);
+    const node = EMOTION_NODE_BY_ID.get(id);
     if (node?.score.mood) score += node.score.mood;
   }
   return Math.max(10, Math.min(100, score));
@@ -72,6 +76,7 @@ export function ProgressChart({
 }: ProgressChartProps) {
   const hu = lang === 'hu';
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const todayKey = formatLocalDateKey(new Date());
 
   const slice = useMemo(() => {
     const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
@@ -93,6 +98,8 @@ export function ProgressChart({
       : padLeft + (idx / (slice.length - 1)) * plotW;
 
   const getY = (val: number) => padTop + plotH - (val / 100) * plotH;
+
+  const lastX = slice.length > 0 ? getX(slice.length - 1) : 0;
 
   const inspectedIdx =
     hoverIdx !== null && hoverIdx < slice.length
@@ -143,20 +150,24 @@ export function ProgressChart({
             );
           })}
 
-          {/* Date axis ticks */}
+          {/* Date axis ticks (skip intermediate ticks too close to the final tick) */}
           {slice.map((day, idx) => {
-            const step = Math.max(1, Math.floor(slice.length / 5));
-            if (idx % step !== 0 && idx !== slice.length - 1) return null;
+            const isLast = idx === slice.length - 1;
+            const step = Math.max(1, Math.ceil(slice.length / 5));
+            const x = getX(idx);
+            if (!isLast && (idx % step !== 0 || Math.abs(lastX - x) < 48)) {
+              return null;
+            }
             return (
               <text
                 key={day.date}
-                x={getX(idx)}
+                x={x}
                 y={height - 8}
-                textAnchor="middle"
+                textAnchor={isLast && slice.length > 1 ? 'end' : 'middle'}
                 fontSize="12"
                 fill="var(--color-ink-muted)"
               >
-                {idx === slice.length - 1 ? (hu ? 'Ma' : 'Today') : day.date.slice(5)}
+                {day.date === todayKey ? (hu ? 'Ma' : 'Today') : day.date.slice(5)}
               </text>
             );
           })}
@@ -237,6 +248,8 @@ export function ProgressChart({
                 fill="transparent"
                 className="cursor-pointer"
                 onMouseEnter={() => setHoverIdx(idx)}
+                onPointerEnter={() => setHoverIdx(idx)}
+                onPointerDown={() => setHoverIdx(idx)}
                 onClick={() => setHoverIdx(idx)}
               />
             );

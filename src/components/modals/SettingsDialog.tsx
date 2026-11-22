@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   FileText,
@@ -12,6 +12,7 @@ import {
   Unlock,
   X,
 } from 'lucide-react';
+import { ModalDialog } from '@/components/modals/ModalDialog';
 import type { AppSettings, CommunicationProfile } from '@/types/serosafe';
 
 interface SettingsDialogProps {
@@ -46,56 +47,96 @@ export function SettingsDialog({
   onOpenLegal,
 }: SettingsDialogProps) {
   const hu = settings.lang === 'hu';
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
 
   const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
   const [pinMsg, setPinMsg] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   const [newInstruction, setNewInstruction] = useState('');
   const [newSensitivity, setNewSensitivity] = useState('');
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
+    if (open) {
+      setNewPin('');
+      setConfirmPin('');
       setPinMsg(null);
+      setPinError(null);
       setProfileMsg(null);
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
     }
   }, [open]);
 
   async function handleSetPin(e: React.FormEvent) {
     e.preventDefault();
-    if (newPin.trim().length < 4) {
-      setPinMsg(
+    const trimmed = newPin.trim();
+    const confirmed = confirmPin.trim();
+    setPinError(null);
+    setPinMsg(null);
+
+    if (trimmed.length < 4) {
+      setPinError(
         hu
           ? 'Legalább 4 karakteres vagy 4 számjegyű PIN szükséges.'
           : 'Enter at least a 4-character PIN.',
       );
       return;
     }
-    await onEnablePin(newPin.trim());
-    setNewPin('');
-    setPinMsg(
-      hu
-        ? 'PIN-zár és helyi titkosítás bekapcsolva.'
-        : 'PIN lock and local AES-GCM encryption enabled.',
-    );
+    if (trimmed !== confirmed) {
+      setPinError(
+        hu
+          ? 'A két PIN-kód nem egyezik meg. Kérlek ellenőrizd.'
+          : 'The two PIN entries do not match.',
+      );
+      return;
+    }
+
+    setPinBusy(true);
+    try {
+      await onEnablePin(trimmed);
+      setNewPin('');
+      setConfirmPin('');
+      setPinMsg(
+        hu
+          ? 'PIN-zár és helyi titkosítás bekapcsolva.'
+          : 'PIN lock and local AES-GCM encryption enabled.',
+      );
+    } catch {
+      setPinError(
+        hu
+          ? 'A helyi titkosítás ebben a környezetben nem indítható el (WebCrypto / HTTPS szükséges).'
+          : 'Local encryption could not be initialized (requires WebCrypto / secure context).',
+      );
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
+  async function handleDisablePinClick() {
+    setPinError(null);
+    setPinMsg(null);
+    setPinBusy(true);
+    try {
+      await onDisablePin();
+      setPinMsg(
+        hu ? 'PIN-zár sikeresen kikapcsolva.' : 'PIN lock disabled.',
+      );
+    } catch {
+      setPinError(
+        hu
+          ? 'Nem sikerült kikapcsolni a PIN-zárat.'
+          : 'Failed to disable PIN lock.',
+      );
+    } finally {
+      setPinBusy(false);
+    }
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) onClose();
-      }}
-      aria-labelledby="settings-dialog-title"
+    <ModalDialog
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="settings-dialog-title"
       className="serosafe-dialog w-[min(100vw-24px,580px)] max-h-[90dvh] rounded-3xl overflow-hidden"
     >
       <div className="max-h-[90dvh] overflow-y-auto calm-scroll p-3.5 @[480px]:p-5 space-y-4 @[480px]:space-y-5">
@@ -571,32 +612,69 @@ export function SettingsDialog({
           {settings.pinEnabled ? (
             <button
               type="button"
-              onClick={() => void onDisablePin()}
-              className="w-full py-2.5 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-ink inline-flex items-center justify-center gap-1.5"
+              disabled={pinBusy}
+              onClick={() => void handleDisablePinClick()}
+              className="w-full py-2.5 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-ink inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
               <Unlock className="w-4 h-4" aria-hidden="true" />
-              {hu ? 'PIN-zár kikapcsolása' : 'Disable PIN lock'}
+              {pinBusy
+                ? hu
+                  ? 'Kikapcsolás...'
+                  : 'Disabling...'
+                : hu
+                  ? 'PIN-zár kikapcsolása'
+                  : 'Disable PIN lock'}
             </button>
           ) : (
-            <form onSubmit={(e) => void handleSetPin(e)} className="flex gap-2">
-              <input
-                type="password"
-                inputMode="numeric"
-                value={newPin}
-                onChange={(e) => setNewPin(e.target.value)}
-                placeholder={hu ? 'Új PIN (min. 4 karakter)' : 'New PIN (min 4 chars)'}
-                className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-surface border border-border text-xs text-ink"
-              />
+            <form onSubmit={(e) => void handleSetPin(e)} className="space-y-2">
+              <div className="grid grid-cols-1 @[440px]:grid-cols-2 gap-2">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  aria-label={hu ? 'Új PIN (min. 4 karakter)' : 'New PIN (min 4 chars)'}
+                  value={newPin}
+                  onChange={(e) => {
+                    setNewPin(e.target.value);
+                    setPinError(null);
+                  }}
+                  placeholder={hu ? 'Új PIN (min. 4 karakter)' : 'New PIN (min 4 chars)'}
+                  className="min-w-0 px-3 py-2 rounded-xl bg-surface border border-border text-xs text-ink"
+                />
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  aria-label={hu ? 'PIN megerősítése' : 'Confirm PIN'}
+                  value={confirmPin}
+                  onChange={(e) => {
+                    setConfirmPin(e.target.value);
+                    setPinError(null);
+                  }}
+                  placeholder={hu ? 'PIN megerősítése...' : 'Confirm PIN...'}
+                  className="min-w-0 px-3 py-2 rounded-xl bg-surface border border-border text-xs text-ink"
+                />
+              </div>
               <button
                 type="submit"
-                className="px-3.5 py-2 rounded-xl bg-accent text-ink-on-accent text-xs font-bold inline-flex items-center gap-1.5"
+                disabled={pinBusy}
+                className="w-full py-2 px-3.5 rounded-xl bg-accent text-ink-on-accent text-xs font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
               >
                 <Lock className="w-3.5 h-3.5" aria-hidden="true" />
-                {hu ? 'Titkosítás' : 'Lock'}
+                {pinBusy
+                  ? hu
+                    ? 'Kulcs létrehozása...'
+                    : 'Encrypting...'
+                  : hu
+                    ? 'Helyi titkosítás bekapcsolása'
+                    : 'Enable local PIN lock'}
               </button>
             </form>
           )}
 
+          {pinError && (
+            <p role="alert" className="text-xs font-semibold text-emergency">
+              {pinError}
+            </p>
+          )}
           {pinMsg && <p className="text-xs font-semibold text-accent">{pinMsg}</p>}
         </section>
 
@@ -615,6 +693,6 @@ export function SettingsDialog({
             : 'Terms of Use, Privacy & Sources'}
         </button>
       </div>
-    </dialog>
+    </ModalDialog>
   );
 }

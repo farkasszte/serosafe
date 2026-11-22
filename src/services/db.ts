@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { validateImportedState } from '@/services/backup';
 import {
   decryptJSON,
   encryptJSON,
@@ -12,6 +13,8 @@ import type {
   UserMedication,
 } from '@/types/serosafe';
 
+export { validateImportedState };
+
 interface KVRecord {
   id: string;
   value: unknown;
@@ -23,6 +26,12 @@ export interface EmergencySnapshot {
   communicationProfile: CommunicationProfile;
   latestSymptom?: ObservableSymptomEntry;
   updatedAtIso: string;
+}
+
+export interface UiPrefsSnapshot {
+  lang: 'hu' | 'en';
+  theme: 'light' | 'dark';
+  reducedMotion: boolean;
 }
 
 class SeroSafeDatabase extends Dexie {
@@ -42,6 +51,16 @@ const KEY_PLAIN_STATE = 'app_state_v1';
 const KEY_ENCRYPTED_STATE = 'encrypted_app_state_v1';
 const KEY_PIN_CONFIG = 'pin_config_v1';
 const KEY_EMERGENCY_SNAPSHOT = 'emergency_snapshot_v1';
+const KEY_UI_PREFS = 'ui_prefs_v1';
+
+// Serializes all IndexedDB mutations so rapid debounced/AES-GCM writes never race out of order.
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
+  const next = writeChain.then(task, task);
+  writeChain = next.catch(() => undefined);
+  return next;
+}
 
 export function buildEmergencySnapshot(state: SeroSafeState): EmergencySnapshot {
   const latestWithSymptom = state.dailyLogs
@@ -75,6 +94,21 @@ export async function getEmergencySnapshot(): Promise<EmergencySnapshot | null> 
   }
 }
 
+export async function getUiPrefs(): Promise<UiPrefsSnapshot | null> {
+  try {
+    const rec = await db.kv.get(KEY_UI_PREFS);
+    return (rec?.value as UiPrefsSnapshot) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveUiPrefs(prefs: UiPrefsSnapshot): Promise<void> {
+  return enqueueWrite(async () => {
+    await db.kv.put({ id: KEY_UI_PREFS, value: prefs });
+  });
+}
+
 export async function loadPlainState(): Promise<SeroSafeState | null> {
   try {
     const rec = await db.kv.get(KEY_PLAIN_STATE);
@@ -92,10 +126,19 @@ export async function loadEncryptedState(
   return decryptJSON<SeroSafeState>(rec.value as EncryptedPayload, key);
 }
 
-export async function saveAppState(
+async function saveAppStateInternal(
   state: SeroSafeState,
   encryptionKey: CryptoKey | null,
 ): Promise<void> {
+  await db.kv.put({
+    id: KEY_UI_PREFS,
+    value: {
+      lang: state.settings.lang,
+      theme: state.settings.theme,
+      reducedMotion: state.settings.reducedMotion,
+    } satisfies UiPrefsSnapshot,
+  });
+
   if (encryptionKey && state.settings.pinEnabled) {
     const encrypted = await encryptJSON(state, encryptionKey);
     await db.kv.put({ id: KEY_ENCRYPTED_STATE, value: encrypted });
@@ -103,6 +146,9 @@ export async function saveAppState(
   } else {
     await db.kv.put({ id: KEY_PLAIN_STATE, value: state });
     await db.kv.delete(KEY_ENCRYPTED_STATE);
+    if (!state.settings.pinEnabled) {
+      await db.kv.delete(KEY_PIN_CONFIG);
+    }
   }
 
   if (state.settings.allowEmergencyWithoutPin) {
@@ -115,31 +161,40 @@ export async function saveAppState(
   }
 }
 
-export async function enablePinProtection(
+export function saveAppState(
+  state: SeroSafeState,
+  encryptionKey: CryptoKey | null,
+): Promise<void> {
+  return enqueueWrite(() => saveAppStateInternal(state, encryptionKey));
+}
+
+export function enablePinProtection(
   state: SeroSafeState,
   pinConfig: PinLockConfig,
   key: CryptoKey,
 ): Promise<void> {
-  const nextState: SeroSafeState = {
-    ...state,
-    settings: { ...state.settings, pinEnabled: true },
-  };
-  await db.kv.put({ id: KEY_PIN_CONFIG, value: pinConfig });
-  await saveAppState(nextState, key);
+  return enqueueWrite(async () => {
+    const nextState: SeroSafeState = {
+      ...state,
+      settings: { ...state.settings, pinEnabled: true },
+    };
+    await db.kv.put({ id: KEY_PIN_CONFIG, value: pinConfig });
+    await saveAppStateInternal(nextState, key);
+  });
 }
 
-export async function disablePinProtection(
-  state: SeroSafeState,
-): Promise<void> {
-  const nextState: SeroSafeState = {
-    ...state,
-    settings: { ...state.settings, pinEnabled: false },
-  };
-  await db.kv.delete(KEY_PIN_CONFIG);
-  await db.kv.delete(KEY_ENCRYPTED_STATE);
-  await saveAppState(nextState, null);
+export function disablePinProtection(state: SeroSafeState): Promise<void> {
+  return enqueueWrite(async () => {
+    const nextState: SeroSafeState = {
+      ...state,
+      settings: { ...state.settings, pinEnabled: false },
+    };
+    await db.kv.delete(KEY_PIN_CONFIG);
+    await db.kv.delete(KEY_ENCRYPTED_STATE);
+    await saveAppStateInternal(nextState, null);
+  });
 }
 
-export async function wipeAllLocalData(): Promise<void> {
-  await db.kv.clear();
+export function wipeAllLocalData(): Promise<void> {
+  return enqueueWrite(() => db.kv.clear());
 }

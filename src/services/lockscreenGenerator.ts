@@ -1,4 +1,3 @@
-import QRCode from 'qrcode';
 import { prioritizeMedicationsForEmergency } from '@/engine/safetyEngine';
 import { formatLastTaken } from '@/services/i18n';
 import type {
@@ -25,7 +24,7 @@ function wrapCanvasText(
   for (let i = 0; i < words.length; i++) {
     const testLine = line ? `${line} ${words[i]}` : words[i];
     if (ctx.measureText(testLine).width > maxWidth && line) {
-      ctx.fillText(line, x, currentY);
+      ctx.fillText(line, x, currentY, maxWidth);
       linesDrawn++;
       if (linesDrawn >= maxLines) {
         return currentY + lineHeight;
@@ -37,7 +36,7 @@ function wrapCanvasText(
     }
   }
   if (line && linesDrawn < maxLines) {
-    ctx.fillText(line, x, currentY);
+    ctx.fillText(line, x, currentY, maxWidth);
     currentY += lineHeight;
   }
   return currentY;
@@ -101,6 +100,7 @@ export async function generateLockScreenPng(
       : '▲ LOCK-SCREEN CLOCK SAFE ZONE (SEROSAFE OFFLINE ICE) ▲',
     540,
     350,
+    968,
   );
   ctx.textAlign = 'left';
 
@@ -123,6 +123,7 @@ export async function generateLockScreenPng(
       : 'SEROSAFE • EMERGENCY HANDOVER (112)',
     88,
     442,
+    904,
   );
   ctx.font = '600 24px system-ui, sans-serif';
   ctx.fillStyle = '#FEF3C7';
@@ -132,6 +133,7 @@ export async function generateLockScreenPng(
       : 'Readable without unlocking • Not a medical diagnosis',
     88,
     480,
+    904,
   );
 
   // 1. COMMUNICATION BARRIER (MIST Top Priority)
@@ -144,6 +146,7 @@ export async function generateLockScreenPng(
       : '1. COMMUNICATION BARRIER (AUTISM / MUTISM)',
     88,
     572,
+    904,
   );
   const barrierText = hu
     ? profile.barrierStatementHu
@@ -153,7 +156,7 @@ export async function generateLockScreenPng(
   if (hasName) {
     ctx.fillStyle = '#FDE68A';
     ctx.font = '700 25px system-ui, sans-serif';
-    ctx.fillText(profile.patientNameOptional.trim(), 88, 608);
+    ctx.fillText(profile.patientNameOptional.trim(), 88, 608, 904);
     barrierY = 644;
   }
   ctx.fillStyle = '#F8FAFC';
@@ -184,6 +187,7 @@ export async function generateLockScreenPng(
       : '2. MEDICATIONS & CLINICAL WASHOUT WINDOW',
     88,
     846,
+    904,
   );
 
   const prioritizedMeds = prioritizeMedicationsForEmergency(meds, assessment);
@@ -201,6 +205,7 @@ export async function generateLockScreenPng(
       hu ? 'Nincs rögzített gyógyszer.' : 'No medications recorded.',
       88,
       medY,
+      904,
     );
   } else {
     for (const m of visibleMeds) {
@@ -212,7 +217,7 @@ export async function generateLockScreenPng(
       ctx.fillStyle = isWashout ? '#FCD34D' : '#F8FAFC';
       ctx.font = '700 27px system-ui, sans-serif';
       const label = `${m.customName} (${m.doseText})`;
-      ctx.fillText(`• ${label}`, 88, medY);
+      ctx.fillText(`• ${label}`, 88, medY, 904);
 
       ctx.fillStyle = isWashout ? '#FDE68A' : '#94A3B8';
       ctx.font = '500 22px system-ui, sans-serif';
@@ -225,7 +230,7 @@ export async function generateLockScreenPng(
             ? `  Vény nélküli • Utolsó: ${formatLastTaken(m.lastTakenIso, lang)}`
             : `  OTC / Supplement • Last: ${formatLastTaken(m.lastTakenIso, lang)}`
           : `  ${hu ? 'Utolsó' : 'Last'}: ${formatLastTaken(m.lastTakenIso, lang)}`;
-      ctx.fillText(sub, 88, medY + 30);
+      ctx.fillText(sub, 88, medY + 30, 904);
       medY += 72;
     }
 
@@ -238,6 +243,7 @@ export async function generateLockScreenPng(
           : `+ ${overflowCount} more medications in SeroSafe app`,
         88,
         medY + 6,
+        904,
       );
     }
   }
@@ -250,6 +256,7 @@ export async function generateLockScreenPng(
     hu ? '3. VITÁLIS JELEK ÉS KONTAKT' : '3. VITALS & EMERGENCY CONTACT',
     88,
     1330,
+    586,
   );
 
   ctx.fillStyle = '#F8FAFC';
@@ -264,6 +271,7 @@ export async function generateLockScreenPng(
     hu ? `Testhő: ${tempText}  |  Pulzus: ${hrText}` : `Temp: ${tempText}  |  HR: ${hrText}`,
     88,
     1382,
+    586,
   );
 
   const flags: string[] = [];
@@ -272,6 +280,8 @@ export async function generateLockScreenPng(
   if (symptom?.hasMuscleStiffness)
     flags.push(hu ? 'Izommerevség' : 'Muscle stiffness');
   if (symptom?.hasTremor) flags.push(hu ? 'Remegés' : 'Tremor');
+  if (symptom?.hasRestingTachycardia)
+    flags.push(hu ? 'Nyugalmi szapora pulzus' : 'Fast resting pulse');
   if (symptom?.hasHeavySweating)
     flags.push(hu ? 'Nyugalmi izzadás' : 'Heavy sweating');
   if (symptom?.hasSevereRestlessnessOrConfusion)
@@ -299,22 +309,30 @@ export async function generateLockScreenPng(
     `${hu ? 'Vészhelyzeti kontakt:' : 'ICE Contact:'} ${profile.emergencyContactName}`,
     88,
     Math.max(nextY + 28, 1618),
+    586,
   );
   ctx.fillStyle = '#FBBF24';
   ctx.font = '800 28px system-ui, sans-serif';
-  ctx.fillText(profile.emergencyContactPhone || '112', 88, Math.max(nextY + 66, 1656));
+  ctx.fillText(
+    profile.emergencyContactPhone || '112',
+    88,
+    Math.max(nextY + 66, 1656),
+    586,
+  );
 
   // QR Box on the right (contains offline plain-text summary — zero server URLs!)
   drawRoundedBox(ctx, 728, 1284, 296, 440, 24, '#FFFFFF');
   const qrMedsList = prioritizedMeds
     .slice(0, 8)
     .map((m) => {
-      const washTag = m.isDiscontinued
-        ? hu
-          ? ' [KIÜRÜLÉS]'
-          : ' [WASHOUT]'
-        : '';
-      return `${m.customName} ${m.doseText}${washTag}`;
+      const exp = assessment.exposures.find((e) => e.medicationId === m.id);
+      const washTag =
+        m.isDiscontinued && exp?.isInWashoutWindow
+          ? hu
+            ? ` [KIÜRÜLÉS:${exp.daysRemainingInWashout}n]`
+            : ` [WASHOUT:${exp.daysRemainingInWashout}d]`
+          : '';
+      return `${m.customName.slice(0, 32)} ${m.doseText.slice(0, 16)}${washTag}`;
     })
     .join('; ');
 
@@ -322,37 +340,50 @@ export async function generateLockScreenPng(
     ? [
         'SEROSAFE HELYI VÉSZHELYZETI ADATLAP',
         profile.patientNameOptional.trim()
-          ? `NEV:${profile.patientNameOptional.trim()}`
+          ? `NEV:${profile.patientNameOptional.trim().slice(0, 60)}`
           : '',
         `KOMMUNIKACIO:${barrierText.slice(0, 120)}`,
-        `GYOGYSZEREK:${qrMedsList || 'nincs'}`,
+        `GYOGYSZEREK:${qrMedsList.slice(0, 360) || 'nincs'}`,
         `VITALIS:T=${tempText},P=${hrText}`,
-        flags.length ? `TUNEK:${flags.join(', ')}` : 'TUNEK:nincs',
-        `KONTAKT:${profile.emergencyContactPhone}`,
+        flags.length ? `TUNETEK:${flags.join(', ').slice(0, 140)}` : 'TUNETEK:nincs',
+        `KONTAKT:${profile.emergencyContactPhone.slice(0, 40)}`,
       ]
         .filter(Boolean)
         .join('\n')
     : [
         'SEROSAFE OFFLINE ICE',
         profile.patientNameOptional.trim()
-          ? `NAME:${profile.patientNameOptional.trim()}`
+          ? `NAME:${profile.patientNameOptional.trim().slice(0, 60)}`
           : '',
         `COMM:${barrierText.slice(0, 120)}`,
-        `MEDS:${qrMedsList || 'none'}`,
+        `MEDS:${qrMedsList.slice(0, 360) || 'none'}`,
         `VITALS:T=${tempText},HR=${hrText}`,
-        flags.length ? `SIGNS:${flags.join(', ')}` : 'SIGNS:none',
-        `ICE:${profile.emergencyContactPhone}`,
+        flags.length ? `SIGNS:${flags.join(', ').slice(0, 140)}` : 'SIGNS:none',
+        `ICE:${profile.emergencyContactPhone.slice(0, 40)}`,
       ]
         .filter(Boolean)
         .join('\n');
 
+  const { default: QRCode } = await import('qrcode');
   const qrCanvas = document.createElement('canvas');
-  await QRCode.toCanvas(qrCanvas, qrPayload, {
-    width: 248,
-    margin: 1,
-    color: { dark: '#0D1318', light: '#FFFFFF' },
-    errorCorrectionLevel: 'M',
-  });
+  try {
+    await QRCode.toCanvas(qrCanvas, qrPayload, {
+      width: 248,
+      margin: 1,
+      color: { dark: '#0D1318', light: '#FFFFFF' },
+      errorCorrectionLevel: 'M',
+    });
+  } catch {
+    const compactPayload = hu
+      ? `SEROSAFE ICE\nT=${tempText},P=${hrText}\n${qrMedsList.slice(0, 160)}`
+      : `SEROSAFE ICE\nT=${tempText},HR=${hrText}\n${qrMedsList.slice(0, 160)}`;
+    await QRCode.toCanvas(qrCanvas, compactPayload, {
+      width: 248,
+      margin: 1,
+      color: { dark: '#0D1318', light: '#FFFFFF' },
+      errorCorrectionLevel: 'L',
+    });
+  }
   ctx.drawImage(qrCanvas, 752, 1310, 248, 248);
 
   ctx.fillStyle = '#0D1318';
@@ -362,6 +393,7 @@ export async function generateLockScreenPng(
     hu ? 'Helyi QR-adatlap' : 'Offline QR summary',
     876,
     1602,
+    264,
   );
   ctx.fillStyle = '#475569';
   ctx.font = '500 18px system-ui, sans-serif';
@@ -369,6 +401,7 @@ export async function generateLockScreenPng(
     hu ? 'Internet nélkül olvasható' : 'No internet required',
     876,
     1634,
+    264,
   );
   ctx.textAlign = 'left';
 
@@ -381,6 +414,7 @@ export async function generateLockScreenPng(
       : `Generated: ${new Date().toLocaleDateString('en-US')} • Patient-logged handover data`,
     56,
     1790,
+    968,
   );
 
   return canvas.toDataURL('image/png');

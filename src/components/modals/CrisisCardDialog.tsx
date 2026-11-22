@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PhoneCall, ShieldAlert, Volume2, VolumeX, X } from 'lucide-react';
+import { ModalDialog } from '@/components/modals/ModalDialog';
 import { BODY_SENSATIONS } from '@/data/substances';
+import { prioritizeMedicationsForEmergency } from '@/engine/safetyEngine';
 import { formatLastTaken, formatMedStatus } from '@/services/i18n';
 import {
   buildCrisisSpeechText,
@@ -35,19 +37,16 @@ export function CrisisCardDialog({
   symptom,
 }: CrisisCardDialogProps) {
   const hu = lang === 'hu';
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      dialog.showModal();
-    } else if (!open && dialog.open) {
+    if (!open) {
       stopCrisisSpeech();
       setSpeaking(false);
-      dialog.close();
     }
+    return () => {
+      stopCrisisSpeech();
+    };
   }, [open]);
 
   function handleClose() {
@@ -76,6 +75,14 @@ export function CrisisCardDialog({
     setSpeaking(started);
   }
 
+  const emergencyMeds = useMemo(
+    () => prioritizeMedicationsForEmergency(meds, assessment),
+    [meds, assessment],
+  );
+
+  const contactPhoneTrimmed = profile.emergencyContactPhone.trim();
+  const contactDialHref = contactPhoneTrimmed.replace(/[^\d+*#,;]/g, '');
+
   const loggedSymptomsList = useMemo(() => {
     if (!symptom) return [];
     const items: string[] = [];
@@ -87,9 +94,7 @@ export function CrisisCardDialog({
       symptom.hasInvoluntaryTwitching &&
       !symptom.selectedSensations.includes('legs_twitch')
     ) {
-      items.push(
-        hu ? 'Akaratlan izomrángás' : 'Involuntary twitching',
-      );
+      items.push(hu ? 'Akaratlan izomrángás' : 'Involuntary twitching');
     }
     if (
       symptom.hasMuscleStiffness &&
@@ -99,6 +104,16 @@ export function CrisisCardDialog({
     }
     if (symptom.hasTremor && !symptom.selectedSensations.includes('arms_tremor')) {
       items.push(hu ? 'Kéz- vagy végtagremegés' : 'Tremor');
+    }
+    if (
+      symptom.hasRestingTachycardia &&
+      !symptom.selectedSensations.includes('chest_racing')
+    ) {
+      items.push(
+        hu
+          ? 'Szapora, erős szívdobogás nyugalomban'
+          : 'Fast, pounding heartbeat at rest',
+      );
     }
     if (
       symptom.hasHeavySweating &&
@@ -123,16 +138,10 @@ export function CrisisCardDialog({
   }, [symptom, hu]);
 
   return (
-    <dialog
-      ref={dialogRef}
-      onCancel={(e) => {
-        e.preventDefault();
-        handleClose();
-      }}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) handleClose();
-      }}
-      aria-labelledby="crisis-dialog-title"
+    <ModalDialog
+      open={open}
+      onClose={handleClose}
+      ariaLabelledBy="crisis-dialog-title"
       className="serosafe-dialog serosafe-crisis-dialog w-[min(100vw-16px,640px)] max-h-[94dvh] rounded-3xl overflow-hidden"
     >
       <div className="max-h-[94dvh] overflow-y-auto calm-scroll p-3.5 @[480px]:p-6 space-y-3 @[480px]:space-y-4">
@@ -261,13 +270,13 @@ export function CrisisCardDialog({
             )}
           </div>
 
-          {meds.length === 0 ? (
+          {emergencyMeds.length === 0 ? (
             <p className="text-sm text-crisis-muted">
               {hu ? 'Nincs rögzített gyógyszer.' : 'No medications logged.'}
             </p>
           ) : (
             <div className="space-y-2">
-              {meds.map((m) => {
+              {emergencyMeds.map((m) => {
                 const exp = assessment.exposures.find(
                   (e) => e.medicationId === m.id,
                 );
@@ -370,15 +379,18 @@ export function CrisisCardDialog({
               {hu ? 'Vészhelyzeti kontakt: ' : 'Emergency contact: '}
             </span>
             <strong className="text-crisis-ink">
-              {profile.emergencyContactName} ({profile.emergencyContactPhone})
+              {profile.emergencyContactName || (hu ? 'Nincs megadva' : 'Not set')}
+              {contactPhoneTrimmed ? ` (${contactPhoneTrimmed})` : ''}
             </strong>
           </div>
-          <a
-            href={`tel:${profile.emergencyContactPhone.replace(/\s+/g, '')}`}
-            className="px-3 py-1.5 rounded-xl bg-crisis-bg border border-crisis-border text-crisis-amber font-bold"
-          >
-            {hu ? 'Kontakt hívása' : 'Call contact'}
-          </a>
+          {contactDialHref && (
+            <a
+              href={`tel:${contactDialHref}`}
+              className="px-3 py-1.5 rounded-xl bg-crisis-bg border border-crisis-border text-crisis-amber font-bold"
+            >
+              {hu ? 'Kontakt hívása' : 'Call contact'}
+            </a>
+          )}
         </section>
 
         <p className="text-xs text-crisis-muted text-center leading-relaxed">
@@ -387,6 +399,6 @@ export function CrisisCardDialog({
             : 'Disclaimer: This handover card displays patient-logged structured information generated offline and is not a medical diagnosis.'}
         </p>
       </div>
-    </dialog>
+    </ModalDialog>
   );
 }

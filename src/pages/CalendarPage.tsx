@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { getWillcoxFeelingLabel } from '@/data/emotionWheel';
 import { BODY_SENSATIONS, EMOTION_WHEEL_NODES } from '@/data/substances';
 import { STRINGS } from '@/services/i18n';
 import type { DailyLogEntry } from '@/types/serosafe';
+import { formatLocalDateKey } from '@/utils/date';
 
 interface CalendarPageProps {
   lang: 'hu' | 'en';
@@ -35,7 +37,7 @@ export function CalendarPage({
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => {
     const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
-    return sorted[0]?.date ?? today.toISOString().slice(0, 10);
+    return sorted[0]?.date ?? formatLocalDateKey(today);
   });
 
   const logByDate = useMemo(
@@ -180,7 +182,11 @@ export function CalendarPage({
               <span>
                 {hu ? 'Energia' : 'Energy'}:{' '}
                 <strong className="text-ink">
-                  {selectedLog.energyLevel !== null ? `${selectedLog.energyLevel}%` : '—'}
+                  {selectedLog.energyLevel !== null
+                    ? hidePercentages
+                      ? '•'
+                      : `${selectedLog.energyLevel}%`
+                    : '—'}
                 </strong>
               </span>
               <span>
@@ -196,7 +202,11 @@ export function CalendarPage({
               <span>
                 {hu ? 'Adag' : 'Meds'}:{' '}
                 <strong className="text-ink">
-                  {selectedLog.medsTakenPct !== null ? `${selectedLog.medsTakenPct}%` : '—'}
+                  {selectedLog.medsTakenPct !== null
+                    ? hidePercentages
+                      ? '•'
+                      : `${selectedLog.medsTakenPct}%`
+                    : '—'}
                 </strong>
               </span>
             </div>
@@ -207,20 +217,30 @@ export function CalendarPage({
           <p className="text-xs text-ink-muted">{t.noEntry}</p>
         ) : (
           <div className="space-y-2 text-xs">
-            {(selectedLog.emotions.length > 0 ||
+            {((selectedLog.emotionModelData?.willcox?.length ?? 0) > 0 ||
+              selectedLog.emotions.length > 0 ||
               selectedLog.bodySensations.length > 0) && (
               <div className="flex flex-wrap gap-1.5">
-                {selectedLog.emotions.map((id) => {
-                  const n = EMOTION_WHEEL_NODES.find((x) => x.id === id);
-                  return n ? (
-                    <span
-                      key={id}
-                      className="px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-strong font-medium"
-                    >
-                      {hu ? n.labelHu : n.labelEn}
-                    </span>
-                  ) : null;
-                })}
+                {selectedLog.emotionModelData?.willcox?.length
+                  ? selectedLog.emotionModelData.willcox.map((id) => (
+                      <span
+                        key={id}
+                        className="px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-strong font-medium"
+                      >
+                        {getWillcoxFeelingLabel(id, lang)}
+                      </span>
+                    ))
+                  : selectedLog.emotions.map((id) => {
+                      const n = EMOTION_WHEEL_NODES.find((x) => x.id === id);
+                      return n ? (
+                        <span
+                          key={id}
+                          className="px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-strong font-medium"
+                        >
+                          {hu ? n.labelHu : n.labelEn}
+                        </span>
+                      ) : null;
+                    })}
                 {selectedLog.bodySensations.map((id) => {
                   const s = BODY_SENSATIONS.find((x) => x.id === id);
                   return s ? (

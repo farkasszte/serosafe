@@ -17,9 +17,12 @@ export function LegalPage({ lang, onBack }: LegalPageProps) {
   const hu = lang === 'hu';
 
   function jumpToSection(id: string) {
+    const reduced =
+      document.documentElement.dataset.reducedMotion === 'true' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     document
       .getElementById(id)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      ?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
   }
 
   return (

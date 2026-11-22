@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Clock, Minus, X } from 'lucide-react';
+import { ModalDialog } from '@/components/modals/ModalDialog';
 import type { MedicationStatus, UserMedication } from '@/types/serosafe';
 
 interface FocusModeDialogProps {
@@ -18,31 +19,47 @@ export function FocusModeDialog({
   onSetStatus,
 }: FocusModeDialogProps) {
   const hu = lang === 'hu';
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
-
   const activeMeds = medications.filter((m) => !m.isDiscontinued);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
+    if (open) {
       const firstPending = activeMeds.findIndex(
         (m) => m.todayStatus === 'PENDING',
       );
       setIndex(firstPending >= 0 ? firstPending : 0);
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
     }
-  }, [open, activeMeds.length]);
+  }, [open]);
+
+  useEffect(() => {
+    if (activeMeds.length > 0 && index >= activeMeds.length) {
+      setIndex(activeMeds.length - 1);
+    }
+  }, [index, activeMeds.length]);
 
   const currentMed = activeMeds[index];
 
   function handleAnswer(status: MedicationStatus) {
     if (!currentMed) return;
     onSetStatus(currentMed.id, status);
-    if (index + 1 < activeMeds.length) {
+
+    const nextPendingAfter = activeMeds.findIndex(
+      (m, idx) => idx > index && m.todayStatus === 'PENDING',
+    );
+    if (nextPendingAfter >= 0) {
+      setIndex(nextPendingAfter);
+      return;
+    }
+
+    const nextPendingBefore = activeMeds.findIndex(
+      (m, idx) => idx < index && m.todayStatus === 'PENDING',
+    );
+    if (nextPendingBefore >= 0) {
+      setIndex(nextPendingBefore);
+      return;
+    }
+
+    if (currentMed.todayStatus !== 'PENDING' && index + 1 < activeMeds.length) {
       setIndex(index + 1);
     } else {
       onClose();
@@ -50,16 +67,10 @@ export function FocusModeDialog({
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) onClose();
-      }}
-      aria-labelledby="focus-dialog-title"
+    <ModalDialog
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="focus-dialog-title"
       className="serosafe-dialog w-[min(100vw-24px,420px)] rounded-3xl"
     >
       <div className="p-4 @[400px]:p-6 space-y-5">
@@ -146,6 +157,6 @@ export function FocusModeDialog({
           </>
         )}
       </div>
-    </dialog>
+    </ModalDialog>
   );
 }

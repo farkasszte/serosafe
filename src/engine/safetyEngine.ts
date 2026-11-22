@@ -10,15 +10,9 @@ import type {
   UserMedication,
   WashoutExposureInfo,
 } from '@/types/serosafe';
+import { daysBetweenDateKeys, formatLocalDateKey } from '@/utils/date';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-function toLocalDateKey(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 /**
  * Resets non-discontinued medication dailyStatuses (`TOOK`/`LATER`/`SKIPPED` -> `PENDING`)
@@ -37,7 +31,7 @@ export function normalizeMedicationsForDate(
       if (med.todayStatus === 'TOOK' && med.lastTakenIso) {
         const parsed = new Date(med.lastTakenIso);
         if (!Number.isNaN(parsed.getTime())) {
-          statusDate = toLocalDateKey(parsed);
+          statusDate = formatLocalDateKey(parsed);
         }
       }
       if (!statusDate && fallbackDateKey) {
@@ -162,16 +156,18 @@ export function evaluateRiskAndSymptoms(
   }
 
   // Opcionális "Mi történne, ha bevenném ezt az új / OTC szert?" teszt
+  let hasDuplicateCandidate = false;
   if (candidateSubstanceId) {
     const candidate = substanceMap.get(candidateSubstanceId);
     if (candidate) {
       const alreadyPresent = activeExposures.some(
         (e) => e.substance.id === candidate.id,
       );
+      sources.add(candidate.sourceRef);
       if (!alreadyPresent) {
         activeExposures.push({
           medicationId: `candidate_${candidate.id}`,
-          name: `${candidate.nameHu} (ellenőrzött szer)`,
+          name: candidate.nameHu,
           substance: candidate,
           isDiscontinued: false,
           isActiveExposure: true,
@@ -179,7 +175,14 @@ export function evaluateRiskAndSymptoms(
           daysElapsedSinceStop: 0,
           daysRemainingInWashout: candidate.clinicalWashoutDays,
         });
-        sources.add(candidate.sourceRef);
+      } else {
+        hasDuplicateCandidate = true;
+        reasonsHu.push(
+          `Duplikált hatóanyag-kockázat: a(z) ${candidate.nameHu} már szerepel az aktív vagy kiürülési listádon (más márkanéven vagy OTC készítményben is). Együttes bevétele túladagoláshoz vagy szerotonerg kumulációhoz vezethet — egyeztess orvossal vagy gyógyszerésszel!`,
+        );
+        reasonsEn.push(
+          `Duplicate ingredient warning: ${candidate.nameEn} is already active or within its washout window on your list. Taking an overlapping brand or OTC product may cause accumulation or overdose — consult a doctor or pharmacist.`,
+        );
       }
     }
   }
@@ -228,9 +231,8 @@ export function evaluateRiskAndSymptoms(
   );
 
   if (!symptom) {
-    const level: ActionGuidanceLevel = hasHighRiskCombination
-      ? 'CONSULT'
-      : 'INFO_LOGGED';
+    const level: ActionGuidanceLevel =
+      hasHighRiskCombination || hasDuplicateCandidate ? 'CONSULT' : 'INFO_LOGGED';
     if (level === 'INFO_LOGGED' && reasonsHu.length === 0) {
       reasonsHu.push(
         'A rögzített gyógyszeradatok strukturálva vannak. Szokatlan testi tünet (különösen láz vagy izommerevség) esetén a gyógyszerlistától függetlenül kérj orvosi segítséget.',
@@ -258,12 +260,20 @@ export function evaluateRiskAndSymptoms(
   const hasHighFever =
     symptom.measuredTempCelsius !== undefined &&
     symptom.measuredTempCelsius >= 38.5;
+  const hasTachycardia =
+    Boolean(symptom.hasRestingTachycardia) ||
+    (symptom.measuredHeartRateBpm !== undefined &&
+      symptom.measuredHeartRateBpm >= 110);
+  const hasSevereTachycardia =
+    symptom.measuredHeartRateBpm !== undefined &&
+    symptom.measuredHeartRateBpm >= 130;
   const hasNeuromuscularSigns =
     symptom.hasInvoluntaryTwitching ||
     symptom.hasMuscleStiffness ||
     symptom.hasTremor;
   const hasAutonomicOrMentalSigns =
     hasFever ||
+    hasTachycardia ||
     symptom.hasHeavySweating ||
     symptom.hasSevereRestlessnessOrConfusion;
 
@@ -271,7 +281,8 @@ export function evaluateRiskAndSymptoms(
     (hasFever && symptom.hasMuscleStiffness) ||
     symptom.hasInvoluntaryTwitching ||
     (hasHighFever &&
-      (symptom.hasSevereRestlessnessOrConfusion || symptom.hasHeavySweating));
+      (symptom.hasSevereRestlessnessOrConfusion || symptom.hasHeavySweating)) ||
+    (hasFever && hasSevereTachycardia);
 
   // Súlyos vészjelek esetén szerotonerg státusztól FÜGGETLENÜL is 112-t javaslunk (NMS / szepszis védelem)
   if (
@@ -302,7 +313,7 @@ export function evaluateRiskAndSymptoms(
       exposures: activeExposures,
       hasHighRiskCombination,
       hasContraindicatedMAOI,
-      hasNmsOrSepsisConcern: true,
+      hasNmsOrSepsisConcern,
       summaryReasonsHu: reasonsHu,
       summaryReasonsEn: reasonsEn,
       sources: Array.from(sources),
@@ -333,9 +344,8 @@ export function evaluateRiskAndSymptoms(
     };
   }
 
-  const level: ActionGuidanceLevel = hasHighRiskCombination
-    ? 'CONSULT'
-    : 'INFO_LOGGED';
+  const level: ActionGuidanceLevel =
+    hasHighRiskCombination || hasDuplicateCandidate ? 'CONSULT' : 'INFO_LOGGED';
 
   if (level === 'INFO_LOGGED' && reasonsHu.length === 0) {
     reasonsHu.push(
@@ -385,6 +395,7 @@ export function computeExplainablePatterns(
   for (let i = 0; i < activeLogs.length - 1; i++) {
     const cur = activeLogs[i];
     const next = activeLogs[i + 1];
+    if (daysBetweenDateKeys(cur.date, next.date) !== 1) continue;
     if (cur.sleepHours !== null && cur.sleepHours < 6) {
       shortSleepOpportunities++;
       if (next.energyLevel !== null && next.energyLevel < 55) {
@@ -439,7 +450,7 @@ export function computeExplainablePatterns(
     const isEarly = nDays < 14 || skippedDoseDates.length < 5;
     insights.push({
       id: 'pat_meds_cog',
-      strong: !isEarly && skippedDoseDates.length >= 4,
+      strong: !isEarly && skippedDoseDates.length >= 5,
       early: isEarly,
       titleHu: `Késleltetett vagy kihagyott adag napján szorongó/ködös állapot (${skippedDoseDates.length} / ${lowAdherenceCount} nap).`,
       titleEn: `On delayed or skipped dose days: anxious or foggy state (${skippedDoseDates.length} of ${lowAdherenceCount} days).`,
