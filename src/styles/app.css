@@ -206,6 +206,10 @@ dialog.serosafe-crisis-dialog::backdrop {
   animation-duration: 0.01ms !important;
 }
 
+.calm-scroll {
+  scrollbar-gutter: stable;
+}
+
 /* Scrollbar polish */
 .calm-scroll::-webkit-scrollbar {
   width: 6px;

@@ -8,7 +8,7 @@ import type {
   UserMedication,
 } from '@/types/serosafe';
 import { computeExplainablePatterns } from '@/engine/safetyEngine';
-import { formatLocalDateKey } from '@/utils/date';
+import { formatLocalDateKey, getDayPartForHour } from '@/utils/date';
 
 export { formatLocalDateKey as formatIsoDateLocal };
 
@@ -16,7 +16,7 @@ export function createEmptyDailyLog(dateKey: string): DailyLogEntry {
   return {
     date: dateKey,
     isGap: false,
-    dayPartsLogged: ['now'],
+    dayPartsLogged: [getDayPartForHour()],
     emotions: [],
     energyLevel: 65,
     sensoryBattery: 70,
@@ -315,7 +315,7 @@ export function createDemoLogs(): DailyLogEntry[] {
       date: dateKey,
       isGap: false,
       dayPartsLogged: isToday
-        ? ['now', 'morning']
+        ? [getDayPartForHour()]
         : ['morning', 'afternoon', 'evening'],
       emotions,
       energyLevel,
@@ -376,7 +376,7 @@ export function createDemoDataset(
     communicationProfile: structuredClone(DEFAULT_COMMUNICATION_PROFILE),
     doctorNote: createDemoDoctorNote(),
     selectedDate: todayKey,
-    activeDayPart: 'now',
+    activeDayPart: getDayPartForHour(),
   };
 }
 
@@ -403,7 +403,7 @@ export function createCleanDataset(
     communicationProfile: structuredClone(DEFAULT_COMMUNICATION_PROFILE),
     doctorNote: null,
     selectedDate: todayKey,
-    activeDayPart: 'now',
+    activeDayPart: getDayPartForHour(),
   };
 }
 

@@ -141,7 +141,6 @@ export const STRINGS = {
       decisionLabel: 'Döntés az idővonalhoz (opcionális)',
       decisionPlaceholder: 'Pl. 14:00 utáni koffein elhagyása',
       dayParts: {
-        now: 'Most',
         morning: 'Reggel',
         forenoon: 'Délelőtt',
         midday: 'Dél',
@@ -226,7 +225,6 @@ export const STRINGS = {
       decisionLabel: 'Decision for timeline (optional)',
       decisionPlaceholder: 'E.g. No caffeine after 14:00',
       dayParts: {
-        now: 'Now',
         morning: 'Morning',
         forenoon: 'Late morning',
         midday: 'Midday',

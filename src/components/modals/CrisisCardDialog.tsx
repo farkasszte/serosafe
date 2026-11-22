@@ -137,33 +137,41 @@ export function CrisisCardDialog({
     return items;
   }, [symptom, hu]);
 
+  const topInstruction = hu
+    ? profile.doInstructionsHu[0]
+    : profile.doInstructionsEn[0];
+  const extraInstructions = (
+    hu ? profile.doInstructionsHu : profile.doInstructionsEn
+  ).slice(1);
+  const sensoryTags = hu
+    ? profile.sensorySensitivitiesHu
+    : profile.sensorySensitivitiesEn;
+
   return (
     <ModalDialog
       open={open}
       onClose={handleClose}
       ariaLabelledBy="crisis-dialog-title"
-      className="serosafe-dialog serosafe-crisis-dialog w-[min(100vw-16px,640px)] max-h-[94dvh] rounded-3xl overflow-hidden"
+      className="serosafe-dialog serosafe-crisis-dialog w-[min(100vw-12px,640px)] max-h-[94dvh] rounded-3xl overflow-hidden flex flex-col"
     >
-      <div className="max-h-[94dvh] overflow-y-auto calm-scroll p-3.5 @[480px]:p-6 space-y-3 @[480px]:space-y-4">
-        {/* Top Action Bar: 112 Call + TTS + Close */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-crisis-border">
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-crisis-amber text-crisis-amber-ink">
-              <ShieldAlert className="w-5 h-5" aria-hidden="true" />
+      {/* Sticky Single-Row Header & Immediate Action Bar */}
+      <div className="shrink-0 bg-crisis-bg border-b border-crisis-border px-3.5 pt-3 pb-2.5 @[480px]:px-5 @[480px]:pt-4 @[480px]:pb-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="p-1.5 @[480px]:p-2 rounded-xl bg-crisis-amber text-crisis-amber-ink shrink-0">
+              <ShieldAlert className="w-4 h-4 @[480px]:w-5 @[480px]:h-5" aria-hidden="true" />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2
                 id="crisis-dialog-title"
-                className="text-base font-extrabold tracking-tight text-crisis-ink"
+                className="text-sm @[480px]:text-base font-extrabold tracking-tight text-crisis-ink"
               >
-                {hu
-                  ? 'SÜRGŐSSÉGI ADATLAP (112)'
-                  : 'OFFLINE EMERGENCY HANDOVER CARD (MIST)'}
+                {hu ? 'SÜRGŐSSÉGI ADATLAP' : 'EMERGENCY CARD (MIST)'}
               </h2>
               <p className="text-xs text-crisis-muted">
                 {hu
-                  ? 'Mentőszolgálati átadási kártya • Nem diagnózis'
-                  : 'Paramedic handover summary • Not a diagnosis'}
+                  ? 'Mentős átadás • Nem diagnózis'
+                  : 'Paramedic handover • Not a diagnosis'}
               </p>
             </div>
           </div>
@@ -172,110 +180,143 @@ export function CrisisCardDialog({
             type="button"
             onClick={handleClose}
             aria-label={hu ? 'Kríziskártya bezárása' : 'Close crisis card'}
-            className="px-3 py-2 rounded-xl bg-crisis-surface border border-crisis-border text-xs font-semibold text-crisis-ink hover:opacity-85 inline-flex items-center gap-1.5"
+            className="shrink-0 px-2.5 py-1.5 rounded-xl bg-crisis-surface border border-crisis-border text-xs font-semibold text-crisis-ink hover:opacity-85 inline-flex items-center gap-1 whitespace-nowrap"
           >
             <X className="w-4 h-4" aria-hidden="true" />
-            {hu ? 'Bezárás' : 'Close'}
+            <span>{hu ? 'Bezárás' : 'Close'}</span>
           </button>
         </div>
 
-        {/* Immediate 112 Call & TTS Read-Aloud */}
-        <div className="grid grid-cols-1 @[480px]:grid-cols-2 gap-2.5">
+        {/* Immediate 112 Call & TTS Read-Aloud — always 2 columns side-by-side */}
+        <div className="grid grid-cols-2 gap-2">
           <a
             href="tel:112"
-            className="py-3.5 px-4 rounded-2xl bg-crisis-amber text-crisis-amber-ink font-extrabold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition"
+            className="py-2.5 px-2.5 rounded-xl bg-crisis-amber text-crisis-amber-ink font-extrabold text-xs @[420px]:text-sm flex items-center justify-center gap-1.5 hover:opacity-90 transition whitespace-nowrap"
           >
-            <PhoneCall className="w-5 h-5" aria-hidden="true" />
-            {hu ? 'HÍVÁS: 112 MENTŐK' : 'CALL EMERGENCY: 112'}
+            <PhoneCall className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span>{hu ? 'HÍVÁS: 112' : 'CALL 112'}</span>
           </a>
 
           <button
             type="button"
             onClick={handleSpeakToggle}
             disabled={!isTtsSupported()}
-            className="py-3.5 px-4 rounded-2xl bg-crisis-surface border border-crisis-border text-crisis-ink font-bold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+            className="py-2.5 px-2.5 rounded-xl bg-crisis-surface border border-crisis-border text-crisis-ink font-bold text-xs @[420px]:text-sm flex items-center justify-center gap-1.5 hover:opacity-90 transition disabled:opacity-50 whitespace-nowrap"
           >
             {speaking ? (
               <>
-                <VolumeX className="w-5 h-5 text-crisis-amber" aria-hidden="true" />
-                {hu ? 'Felolvasás leállítása' : 'Stop voice readout'}
+                <VolumeX className="w-4 h-4 text-crisis-amber shrink-0" aria-hidden="true" />
+                <span>{hu ? 'Leállítás' : 'Stop TTS'}</span>
               </>
             ) : (
               <>
-                <Volume2 className="w-5 h-5 text-crisis-amber" aria-hidden="true" />
-                {hu ? 'Hangos felolvasás' : 'Read aloud (TTS)'}
+                <Volume2 className="w-4 h-4 text-crisis-amber shrink-0" aria-hidden="true" />
+                <span>{hu ? 'Felolvasás (TTS)' : 'Read aloud'}</span>
               </>
             )}
           </button>
         </div>
 
-        {/* 1. Communication Barrier (Top MIST Priority) */}
-        <section className="p-3 @[480px]:p-4 rounded-xl @[480px]:rounded-2xl bg-crisis-surface border-2 border-crisis-amber space-y-2">
-          <div className="text-xs font-extrabold uppercase tracking-wide text-crisis-amber">
-            {hu
-              ? '1. KOMMUNIKÁCIÓ ÉS NEURODIVERGENCIA'
-              : '1. COMMUNICATION & NEURODIVERGENCE (ASD)'}
-          </div>
-          {profile.patientNameOptional && (
-            <div className="text-sm font-bold text-crisis-ink">
-              {profile.patientNameOptional}
+        {/* Compact Above-the-Fold MIST Vital + Risk Strip */}
+        <div className="grid grid-cols-3 gap-1.5 text-center tabular-nums">
+          <div className="py-1.5 px-2 rounded-xl bg-crisis-surface border border-crisis-border">
+            <div className="text-xs text-crisis-muted">{hu ? 'Testhő' : 'Temp'}</div>
+            <div className="text-xs @[420px]:text-sm font-extrabold text-crisis-ink">
+              {symptom?.measuredTempCelsius
+                ? `${symptom.measuredTempCelsius.toFixed(1)} °C`
+                : '—'}
             </div>
-          )}
-          <p className="text-base font-bold text-crisis-ink leading-snug">
+          </div>
+          <div className="py-1.5 px-2 rounded-xl bg-crisis-surface border border-crisis-border">
+            <div className="text-xs text-crisis-muted">{hu ? 'Pulzus' : 'HR'}</div>
+            <div className="text-xs @[420px]:text-sm font-extrabold text-crisis-ink">
+              {symptom?.measuredHeartRateBpm
+                ? `${symptom.measuredHeartRateBpm}${hu ? '/p' : ' bpm'}`
+                : '—'}
+            </div>
+          </div>
+          <div className="py-1.5 px-2 rounded-xl bg-crisis-surface border border-crisis-border">
+            <div className="text-xs text-crisis-muted">
+              {hu ? 'Szerotonerg' : 'Serotonergic'}
+            </div>
+            <div className="text-xs @[420px]:text-sm font-extrabold text-crisis-amber">
+              {assessment.activeSerotonergicCount}{' '}
+              {hu ? 'aktív' : 'active'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scrollable MIST Body — Flattened bands so Barrier, Meds & Vitals fit without deep nesting */}
+      <div className="flex-1 overflow-y-auto calm-scroll divide-y divide-crisis-border">
+        {/* 1. Communication Barrier (Top MIST Priority) */}
+        <section className="px-3.5 py-2.5 @[480px]:px-5 @[480px]:py-3.5 bg-crisis-surface space-y-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <span className="text-xs font-extrabold uppercase tracking-wide text-crisis-amber">
+              {hu ? '1. KOMMUNIKÁCIÓ (ASD / MUTIZMUS)' : '1. COMMUNICATION (ASD / MUTISM)'}
+            </span>
+            {profile.patientNameOptional && (
+              <span className="text-xs font-bold text-crisis-ink">
+                {profile.patientNameOptional}
+              </span>
+            )}
+          </div>
+          <p className="text-sm @[480px]:text-base font-bold text-crisis-ink leading-snug">
             {hu ? profile.barrierStatementHu : profile.barrierStatementEn}
           </p>
-          <ul className="space-y-1 text-xs text-crisis-muted list-disc pl-4">
-            {(hu ? profile.doInstructionsHu : profile.doInstructionsEn).map(
-              (line, i) => (
-                <li key={i}>{line}</li>
-              ),
-            )}
-          </ul>
-          {(hu ? profile.sensorySensitivitiesHu : profile.sensorySensitivitiesEn)
-            .length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {(hu
-                ? profile.sensorySensitivitiesHu
-                : profile.sensorySensitivitiesEn
-              ).map((tag, idx) => (
+          {topInstruction && (
+            <p className="text-xs font-semibold text-crisis-amber leading-snug">
+              → {topInstruction}
+            </p>
+          )}
+          {(extraInstructions.length > 0 || sensoryTags.length > 0) && (
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {sensoryTags.map((tag, idx) => (
                 <span
                   key={idx}
-                  className="px-2.5 py-0.5 rounded-full bg-crisis-bg border border-crisis-amber text-xs font-semibold text-crisis-amber"
+                  className="px-2 py-0.5 rounded-full bg-crisis-bg border border-crisis-amber text-xs font-semibold text-crisis-amber"
                 >
                   {tag}
                 </span>
               ))}
             </div>
           )}
+          {extraInstructions.length > 0 && (
+            <ul className="space-y-0.5 text-xs text-crisis-muted list-disc pl-4">
+              {extraInstructions.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          )}
         </section>
 
-        {/* 2. Serotonergic & Washout Medications */}
-        <section className="p-3 @[480px]:p-4 rounded-xl @[480px]:rounded-2xl bg-crisis-surface border border-crisis-border space-y-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* 2. Serotonergic & Washout Medications (Prioritized by Risk) */}
+        <section className="px-3.5 py-2.5 @[480px]:px-5 @[480px]:py-3.5 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="text-xs font-extrabold uppercase tracking-wide text-crisis-amber">
               {hu
                 ? '2. SZEROTONERG ÉS EGYÉB GYÓGYSZEREK'
-                : '2. SEROTONERGIC & OTHER MEDICATIONS'}
+                : '2. MEDICATIONS & WASHOUT'}
             </span>
             {assessment.hasHighRiskCombination && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-crisis-amber text-crisis-amber-ink">
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-crisis-amber text-crisis-amber-ink">
                 {assessment.hasContraindicatedMAOI
                   ? hu
-                    ? 'MAO-gátló kölcsönhatási jelzés'
-                    : 'MAOI interaction flag'
+                    ? 'MAO-gátló jelzés'
+                    : 'MAOI flag'
                   : hu
                     ? `${assessment.activeSerotonergicCount} szerotonerg szer`
-                    : `${assessment.activeSerotonergicCount} serotonergic agents`}
+                    : `${assessment.activeSerotonergicCount} serotonergic`}
               </span>
             )}
           </div>
 
           {emergencyMeds.length === 0 ? (
-            <p className="text-sm text-crisis-muted">
+            <p className="text-xs text-crisis-muted">
               {hu ? 'Nincs rögzített gyógyszer.' : 'No medications logged.'}
             </p>
           ) : (
-            <div className="space-y-2">
+            <ul className="divide-y divide-crisis-border/70 border-y border-crisis-border/70">
               {emergencyMeds.map((m) => {
                 const exp = assessment.exposures.find(
                   (e) => e.medicationId === m.id,
@@ -283,82 +324,52 @@ export function CrisisCardDialog({
                 const inWashout = m.isDiscontinued && exp?.isInWashoutWindow;
 
                 return (
-                  <div
+                  <li
                     key={m.id}
-                    className="p-2.5 rounded-xl bg-crisis-bg border border-crisis-border flex flex-wrap items-center justify-between gap-2"
+                    className="py-1.5 flex items-center justify-between gap-2"
                   >
-                    <div>
-                      <div className="text-sm font-bold text-crisis-ink">
+                    <div className="min-w-0">
+                      <div className="text-xs @[480px]:text-sm font-bold text-crisis-ink leading-tight">
                         {m.customName}{' '}
                         <span className="text-crisis-amber">{m.doseText}</span>
                       </div>
-                      <div className="text-xs text-crisis-muted">
+                      <div className="text-xs text-crisis-muted leading-tight">
                         {inWashout
                           ? hu
-                            ? `LEÁLLÍTVA — Kiürülési időszak aktív: még ${exp.daysRemainingInWashout} nap`
+                            ? `LEÁLLÍTVA — Kiürülés aktív: még ${exp.daysRemainingInWashout} nap`
                             : `STOPPED — Washout active: ${exp.daysRemainingInWashout}d left`
-                          : `${hu ? 'Utolsó bevétel' : 'Last taken'}: ${formatLastTaken(m.lastTakenIso, lang)}${m.scheduleTime ? ` • ${hu ? 'Terv' : 'Sched'}: ${m.scheduleTime}` : ''}${m.isOTCOrSupplement ? (hu ? ' • Vény nélküli' : ' • OTC') : ''}`}
+                          : `${hu ? 'Utolsó' : 'Last'}: ${formatLastTaken(m.lastTakenIso, lang)}${m.isOTCOrSupplement ? (hu ? ' • Vény nélküli' : ' • OTC') : ''}`}
                       </div>
                     </div>
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-crisis-surface text-crisis-ink border border-crisis-border">
+                    <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-lg bg-crisis-surface text-crisis-ink border border-crisis-border">
                       {inWashout
                         ? hu
                           ? 'KIÜRÜLÉS'
                           : 'WASHOUT'
                         : formatMedStatus(m.todayStatus, lang)}
                     </span>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </section>
 
-        {/* 3. Measured Vitals & Patient-Observed Symptoms */}
-        <section className="p-3 @[480px]:p-4 rounded-xl @[480px]:rounded-2xl bg-crisis-surface border border-crisis-border space-y-2.5">
-          <div className="text-xs font-extrabold uppercase tracking-wide text-crisis-amber">
-            {hu
-              ? '3. MÉRT VITÁLIS ADATOK ÉS TÜNETEK'
-              : '3. MEASURED VITALS & SYMPTOMS'}
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
-            <div className="p-2.5 rounded-xl bg-crisis-bg border border-crisis-border">
-              <div className="text-xs text-crisis-muted">
-                {hu ? 'Testhő' : 'Temp'}
-              </div>
-              <div className="text-sm @[420px]:text-base font-extrabold text-crisis-ink">
-                {symptom?.measuredTempCelsius
-                  ? `${symptom.measuredTempCelsius.toFixed(1)} °C`
-                  : '—'}
-              </div>
-            </div>
-            <div className="p-2.5 rounded-xl bg-crisis-bg border border-crisis-border">
-              <div className="text-xs text-crisis-muted">
-                {hu ? 'Pulzus' : 'Heart rate'}
-              </div>
-              <div className="text-sm @[420px]:text-base font-extrabold text-crisis-ink">
-                {symptom?.measuredHeartRateBpm
-                  ? `${symptom.measuredHeartRateBpm}${hu ? ' /perc' : ' bpm'}`
-                  : '—'}
-              </div>
-            </div>
-            <div className="p-2.5 rounded-xl bg-crisis-bg border border-crisis-border">
-              <div className="text-xs text-crisis-muted">
-                {hu ? 'Kezdet' : 'Onset'}
-              </div>
-              <div className="text-sm @[420px]:text-base font-extrabold text-crisis-ink">
-                {symptom?.onsetHoursAgo !== undefined
-                  ? hu
-                    ? `~${symptom.onsetHoursAgo} órája`
-                    : `~${symptom.onsetHoursAgo} h`
-                  : '—'}
-              </div>
-            </div>
+        {/* 3. Measured Symptoms & Onset */}
+        <section className="px-3.5 py-2.5 @[480px]:px-5 @[480px]:py-3.5 space-y-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wide text-crisis-amber">
+              {hu ? '3. ÉSZLELT TÜNETEK' : '3. OBSERVED SYMPTOMS'}
+            </span>
+            {symptom?.onsetHoursAgo !== undefined && (
+              <span className="text-xs text-crisis-muted tabular-nums">
+                {hu ? `Kezdet: ~${symptom.onsetHoursAgo} órája` : `Onset: ~${symptom.onsetHoursAgo}h ago`}
+              </span>
+            )}
           </div>
 
           {loggedSymptomsList.length > 0 ? (
-            <ul className="space-y-1 text-sm font-semibold text-crisis-ink list-disc pl-4">
+            <ul className="space-y-0.5 text-xs @[480px]:text-sm font-semibold text-crisis-ink list-disc pl-4">
               {loggedSymptomsList.map((item, idx) => (
                 <li key={idx}>{item}</li>
               ))}
@@ -373,31 +384,33 @@ export function CrisisCardDialog({
         </section>
 
         {/* 4. Emergency Contact & Disclaimer */}
-        <section className="p-3 @[480px]:p-3.5 rounded-xl @[480px]:rounded-2xl bg-crisis-surface border border-crisis-border flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div>
-            <span className="text-crisis-muted">
-              {hu ? 'Vészhelyzeti kontakt: ' : 'Emergency contact: '}
-            </span>
-            <strong className="text-crisis-ink">
-              {profile.emergencyContactName || (hu ? 'Nincs megadva' : 'Not set')}
-              {contactPhoneTrimmed ? ` (${contactPhoneTrimmed})` : ''}
-            </strong>
+        <section className="px-3.5 py-2.5 @[480px]:px-5 @[480px]:py-3.5 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div>
+              <span className="text-crisis-muted">
+                {hu ? 'Vészhelyzeti kontakt: ' : 'ICE Contact: '}
+              </span>
+              <strong className="text-crisis-ink">
+                {profile.emergencyContactName || (hu ? 'Nincs megadva' : 'Not set')}
+                {contactPhoneTrimmed ? ` (${contactPhoneTrimmed})` : ''}
+              </strong>
+            </div>
+            {contactDialHref && (
+              <a
+                href={`tel:${contactDialHref}`}
+                className="px-3 py-1 rounded-xl bg-crisis-surface border border-crisis-border text-crisis-amber font-bold"
+              >
+                {hu ? 'Kontakt hívása' : 'Call ICE'}
+              </a>
+            )}
           </div>
-          {contactDialHref && (
-            <a
-              href={`tel:${contactDialHref}`}
-              className="px-3 py-1.5 rounded-xl bg-crisis-bg border border-crisis-border text-crisis-amber font-bold"
-            >
-              {hu ? 'Kontakt hívása' : 'Call contact'}
-            </a>
-          )}
-        </section>
 
-        <p className="text-xs text-crisis-muted text-center leading-relaxed">
-          {hu
-            ? 'Jogi nyilatkozat: Ez az adatlap a felhasználó által helyben rögzített strukturált információkat tartalmazza, nem minősül orvosi diagnózisnak.'
-            : 'Disclaimer: This handover card displays patient-logged structured information generated offline and is not a medical diagnosis.'}
-        </p>
+          <p className="text-xs text-crisis-muted leading-relaxed">
+            {hu
+              ? 'Jogi nyilatkozat: A felhasználó által helyben rögzített tájékoztató adatlap, nem minősül orvosi diagnózisnak.'
+              : 'Disclaimer: Patient-logged offline handover summary; not a medical diagnosis.'}
+          </p>
+        </section>
       </div>
     </ModalDialog>
   );

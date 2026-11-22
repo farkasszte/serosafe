@@ -8,9 +8,11 @@ import {
   Image as ImageIcon,
   Info,
   Printer,
+  Search,
   ShieldAlert,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react';
 import { BodyMap } from '@/components/visuals/BodyMap';
 import { CURATED_SUBSTANCES } from '@/data/substances';
@@ -53,6 +55,11 @@ interface SafetyPageProps {
   onResetAllData: () => void;
 }
 
+interface StatusFeedback {
+  text: string;
+  isError?: boolean;
+}
+
 function escapeCsvCell(raw: string): string {
   const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return `"${safe.replace(/"/g, '""')}"`;
@@ -75,10 +82,12 @@ export function SafetyPage({
   const hu = lang === 'hu';
 
   const [candidateSubstanceId, setCandidateSubstanceId] = useState<string>('');
+  const [checkerQuery, setCheckerQuery] = useState<string>('');
   const [lockPngUrl, setLockPngUrl] = useState<string | null>(null);
   const [generatingLock, setGeneratingLock] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [lockStatusMessage, setLockStatusMessage] = useState<StatusFeedback | null>(null);
+  const [backupStatusMessage, setBackupStatusMessage] = useState<StatusFeedback | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const symptom = todayLog.symptomEntry;
@@ -94,6 +103,36 @@ export function SafetyPage({
           )
         : baseAssessment,
     [candidateSubstanceId, medications, symptom, baseAssessment],
+  );
+
+  const filteredSubstances = useMemo(() => {
+    const q = checkerQuery.trim().toLowerCase();
+    if (!q) return CURATED_SUBSTANCES;
+    return CURATED_SUBSTANCES.filter(
+      (s) =>
+        s.nameHu.toLowerCase().includes(q) ||
+        s.nameEn.toLowerCase().includes(q) ||
+        s.drugClass.toLowerCase().includes(q) ||
+        s.examplesHu.some((ex) => ex.toLowerCase().includes(q)),
+    );
+  }, [checkerQuery]);
+
+  const otcMatches = useMemo(
+    () => filteredSubstances.filter((s) => s.isOTCOrSupplement),
+    [filteredSubstances],
+  );
+  const maoiMatches = useMemo(
+    () => filteredSubstances.filter((s) => !s.isOTCOrSupplement && s.drugClass === 'MAOI'),
+    [filteredSubstances],
+  );
+  const otherMatches = useMemo(
+    () => filteredSubstances.filter((s) => !s.isOTCOrSupplement && s.drugClass !== 'MAOI'),
+    [filteredSubstances],
+  );
+
+  const selectedCandidate = useMemo(
+    () => CURATED_SUBSTANCES.find((s) => s.id === candidateSubstanceId) ?? null,
+    [candidateSubstanceId],
   );
 
   function updateSymptomField<K extends keyof ObservableSymptomEntry>(
@@ -134,6 +173,7 @@ export function SafetyPage({
 
   async function handleGenerateLockScreen() {
     setGeneratingLock(true);
+    setLockStatusMessage(null);
     try {
       // Uses `baseAssessment` so temporary "what if I took X?" simulation never leaks into emergency lock-screen PNG
       const url = await generateLockScreenPng({
@@ -144,17 +184,18 @@ export function SafetyPage({
         symptom,
       });
       setLockPngUrl(url);
-      setStatusMessage(
-        hu
+      setLockStatusMessage({
+        text: hu
           ? 'Zárolási képernyő háttérkép és QR-kód elkészült.'
           : 'Lock-screen PNG and offline QR code generated.',
-      );
+      });
     } catch {
-      setStatusMessage(
-        hu
+      setLockStatusMessage({
+        isError: true,
+        text: hu
           ? 'Nem sikerült elkészíteni a zárolási képet.'
           : 'Could not generate lock-screen PNG.',
-      );
+      });
     } finally {
       setGeneratingLock(false);
     }
@@ -170,6 +211,9 @@ export function SafetyPage({
     a.download = `serosafe-backup-${todayLog.date}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    setBackupStatusMessage({
+      text: hu ? 'JSON biztonsági mentés letöltve.' : 'JSON backup downloaded.',
+    });
   }
 
   function handleExportCsv() {
@@ -190,6 +234,9 @@ export function SafetyPage({
     a.download = `serosafe-logs-${todayLog.date}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setBackupStatusMessage({
+      text: hu ? 'CSV táblázat letöltve.' : 'CSV table downloaded.',
+    });
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -207,15 +254,18 @@ export function SafetyPage({
           throw new Error('Invalid SeroSafe backup format');
         }
         onImportStateJson(validated);
-        setStatusMessage(
-          hu ? 'Helyi mentés sikeresen visszatöltve.' : 'Backup restored locally.',
-        );
+        setBackupStatusMessage({
+          text: hu
+            ? 'Helyi mentés sikeresen visszatöltve.'
+            : 'Backup restored locally.',
+        });
       } catch {
-        setStatusMessage(
-          hu
+        setBackupStatusMessage({
+          isError: true,
+          text: hu
             ? 'Érvénytelen SeroSafe JSON fájl.'
             : 'Invalid SeroSafe JSON backup file.',
-        );
+        });
       }
     };
     reader.readAsText(file);
@@ -316,6 +366,17 @@ export function SafetyPage({
           </button>
         </div>
 
+        {lockStatusMessage && (
+          <p
+            role={lockStatusMessage.isError ? 'alert' : 'status'}
+            className={`text-xs font-semibold ${
+              lockStatusMessage.isError ? 'text-emergency' : 'text-accent-strong'
+            }`}
+          >
+            {lockStatusMessage.text}
+          </p>
+        )}
+
         {lockPngUrl && (
           <div className="flex flex-col @lg:flex-row items-center gap-4 p-3.5 rounded-2xl bg-surface border border-border">
             <img
@@ -346,30 +407,176 @@ export function SafetyPage({
         )}
       </section>
 
-      {/* Curated 30-Substance Interaction Filter */}
+      {/* Curated 30-Substance Interaction Filter + Inline Immediate Result Card */}
       <section className="bg-surface border-y border-border px-4 py-4 @lg:border @lg:rounded-3xl @lg:p-6 space-y-3">
-        <h2 className="text-base font-bold text-ink">{t.checkerTitle}</h2>
-        <select
-          aria-label={t.checkerLabel}
-          value={candidateSubstanceId}
-          onChange={(e) => setCandidateSubstanceId(e.target.value)}
-          className="w-full px-3.5 py-2.5 rounded-xl bg-surface-subtle border border-border text-xs font-medium text-ink"
-        >
-          <option value="">{t.checkerNone}</option>
-          {CURATED_SUBSTANCES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {hu ? s.nameHu : s.nameEn} ({s.examplesHu.join(', ')}) —{' '}
-              {s.isOTCOrSupplement
-                ? hu
-                  ? 'Vény nélküli'
-                  : 'OTC'
-                : formatDrugClass(s.drugClass, lang)}{' '}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-bold text-ink">{t.checkerTitle}</h2>
+          {(checkerQuery || candidateSubstanceId) && (
+            <button
+              type="button"
+              onClick={() => {
+                setCheckerQuery('');
+                setCandidateSubstanceId('');
+              }}
+              className="px-2.5 py-1 rounded-full bg-surface-subtle border border-border text-xs font-semibold text-ink-muted hover:text-ink inline-flex items-center gap-1"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+              {hu ? 'Szűrő törlése' : 'Clear check'}
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 @lg:grid-cols-2 gap-2.5">
+          <div className="relative">
+            <Search
+              className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              aria-label={
+                hu
+                  ? 'Keresés hatóanyagra vagy márkanévre (pl. Robitussin, orbáncfű)'
+                  : 'Search ingredient or brand (e.g. DXM, St. John’s Wort)'
+              }
+              value={checkerQuery}
+              onChange={(e) => setCheckerQuery(e.target.value)}
+              placeholder={
+                hu
+                  ? 'Keresés névre vagy márkanévre (pl. DXM, Robitussin)...'
+                  : 'Search ingredient or brand (e.g. DXM, Zoloft)...'
+              }
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-subtle border border-border text-xs font-medium text-ink"
+            />
+          </div>
+
+          <select
+            aria-label={t.checkerLabel}
+            value={candidateSubstanceId}
+            onChange={(e) => setCandidateSubstanceId(e.target.value)}
+            className="w-full px-3.5 py-2.5 rounded-xl bg-surface-subtle border border-border text-xs font-medium text-ink"
+          >
+            <option value="">{t.checkerNone}</option>
+            {otcMatches.length > 0 && (
+              <optgroup label={hu ? 'Vény nélküli / étrend-kiegészítők' : 'OTC & Supplements'}>
+                {otcMatches.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {hu ? s.nameHu : s.nameEn} ({s.examplesHu.join(', ')}) —{' '}
+                    {hu
+                      ? `[${s.clinicalWashoutDays} nap kiürülés]`
+                      : `[${s.clinicalWashoutDays}d washout]`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {maoiMatches.length > 0 && (
+              <optgroup label={hu ? 'MAO-gátlók és kórházi szerek' : 'MAOIs & Hospital agents'}>
+                {maoiMatches.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {hu ? s.nameHu : s.nameEn} ({s.examplesHu.join(', ')}) —{' '}
+                    {hu
+                      ? `[${s.clinicalWashoutDays} nap kiürülés]`
+                      : `[${s.clinicalWashoutDays}d washout]`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {otherMatches.length > 0 && (
+              <optgroup label={hu ? 'Antidepresszánsok, fájdalomcsillapítók és triptánok' : 'Antidepressants, Analgesics & Triptans'}>
+                {otherMatches.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {hu ? s.nameHu : s.nameEn} ({s.examplesHu.join(', ')}) —{' '}
+                    {formatDrugClass(s.drugClass, lang)}{' '}
+                    {hu
+                      ? `[${s.clinicalWashoutDays} nap kiürülés]`
+                      : `[${s.clinicalWashoutDays}d washout]`}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+
+        {/* Quick tap chips when user filters to a focused subset */}
+        {checkerQuery.trim().length > 0 && (
+          filteredSubstances.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {filteredSubstances.slice(0, 6).map((s) => {
+                const selected = candidateSubstanceId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setCandidateSubstanceId(selected ? '' : s.id)}
+                    className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition ${
+                      selected
+                        ? 'bg-accent text-ink-on-accent border-accent'
+                        : 'bg-surface-subtle border-border text-ink hover:border-border-strong'
+                    }`}
+                  >
+                    {hu ? s.nameHu : s.nameEn} ({s.examplesHu[0]})
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-ink-muted">
               {hu
-                ? `[${s.clinicalWashoutDays} nap kiürülés]`
-                : `[${s.clinicalWashoutDays}d washout]`}
-            </option>
-          ))}
-        </select>
+                ? 'Nincs találat a 30 tételes listában — töröld a keresést a teljes lista megjelenítéséhez.'
+                : 'No match in the 30-substance list — clear search to browse all.'}
+            </p>
+          )
+        )}
+
+        {/* Inline Assessment Result Card right below the checker (always visible without scrolling up) */}
+        {selectedCandidate && (
+          <div
+            role={isEmergency ? 'alert' : 'status'}
+            className={`p-3.5 rounded-2xl border space-y-2 ${
+              isEmergency
+                ? 'bg-emergency-soft border-emergency-border'
+                : isConsult
+                  ? 'bg-warning-soft border-warning-border'
+                  : 'bg-surface-blue border-secondary-border'
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-bold text-ink">
+                {hu ? selectedCandidate.nameHu : selectedCandidate.nameEn} (
+                {selectedCandidate.examplesHu.join(', ')}) ·{' '}
+                <span className="font-semibold text-ink-muted">
+                  {hu
+                    ? `${selectedCandidate.clinicalWashoutDays} napos kiürülési ablak`
+                    : `${selectedCandidate.clinicalWashoutDays}-day washout window`}
+                </span>
+              </div>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
+                  isEmergency
+                    ? 'bg-emergency text-emergency-ink'
+                    : isConsult
+                      ? 'bg-surface text-warning-ink border border-warning-border'
+                      : 'bg-surface text-secondary border border-secondary-border'
+                }`}
+              >
+                {formatAssessmentLevel(assessment.level, lang)}
+              </span>
+            </div>
+
+            <p className="text-xs text-ink">
+              {hu ? selectedCandidate.notesHu : selectedCandidate.notesEn}
+            </p>
+
+            <ul className="space-y-1 text-xs font-medium text-ink list-disc pl-4">
+              {(hu ? assessment.summaryReasonsHu : assessment.summaryReasonsEn).map(
+                (reason, idx) => (
+                  <li key={idx}>{reason}</li>
+                ),
+              )}
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* Vitals & Synced Safety BodyMap */}
@@ -558,8 +765,15 @@ export function SafetyPage({
             )}
           </div>
 
-          {statusMessage && (
-            <p className="text-xs font-semibold text-accent">{statusMessage}</p>
+          {backupStatusMessage && (
+            <p
+              role={backupStatusMessage.isError ? 'alert' : 'status'}
+              className={`text-xs font-semibold ${
+                backupStatusMessage.isError ? 'text-emergency' : 'text-accent-strong'
+              }`}
+            >
+              {backupStatusMessage.text}
+            </p>
           )}
         </div>
       </details>

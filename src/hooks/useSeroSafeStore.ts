@@ -42,7 +42,7 @@ import type {
   SeroSafeState,
   UserMedication,
 } from '@/types/serosafe';
-import { formatLocalDateKey } from '@/utils/date';
+import { formatLocalDateKey, getDayPartForHour } from '@/utils/date';
 
 function mergeRecomputedPatterns(updated: SeroSafeState): PatternInsight[] {
   const computed = computeExplainablePatterns(updated.dailyLogs, updated.habits);
@@ -80,7 +80,10 @@ export function useSeroSafeStore() {
   const [uiPrefs, setUiPrefs] = useState<UiPrefsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [todayKey, setTodayKey] = useState<string>(() => formatLocalDateKey());
+  const [isDayPartAuto, setIsDayPartAuto] = useState(true);
 
+  const isDayPartAutoRef = useRef(true);
+  isDayPartAutoRef.current = isDayPartAuto;
   const pendingSaveRef = useRef<{
     state: SeroSafeState;
     key: CryptoKey | null;
@@ -113,10 +116,12 @@ export function useSeroSafeStore() {
 
       if (existing) {
         skipNextAutoSaveRef.current = false;
+        setIsDayPartAuto(true);
         setState({
           ...existing,
           settings: { ...existing.settings, pinEnabled: false },
           selectedDate: currentToday,
+          activeDayPart: getDayPartForHour(),
           medications: normalizeMedicationsForDate(
             existing.medications,
             currentToday,
@@ -128,6 +133,7 @@ export function useSeroSafeStore() {
         await saveAppState(seeded, null);
         if (mounted) {
           skipNextAutoSaveRef.current = true;
+          setIsDayPartAuto(true);
           setState(seeded);
         }
       }
@@ -139,38 +145,55 @@ export function useSeroSafeStore() {
     };
   }, []);
 
-  // Midnight rollover detection while the PWA stays open overnight
+  // Midnight rollover & clock-hour DayPart auto-sync while app stays open
   useEffect(() => {
-    function checkDateRollover() {
-      const freshKey = formatLocalDateKey();
+    function checkDateAndHourRollover() {
+      const now = new Date();
+      const freshKey = formatLocalDateKey(now);
+      const clockPart = getDayPartForHour(now);
+
       setTodayKey((prevKey) => {
-        if (prevKey === freshKey) return prevKey;
-        setState((prevState) =>
-          prevState
-            ? {
-                ...prevState,
-                selectedDate: freshKey,
-                medications: normalizeMedicationsForDate(
+        const dateChanged = prevKey !== freshKey;
+        if (dateChanged || isDayPartAutoRef.current) {
+          setState((prevState) => {
+            if (!prevState) return prevState;
+            const nextPart =
+              dateChanged || isDayPartAutoRef.current
+                ? clockPart
+                : prevState.activeDayPart;
+            if (!dateChanged && prevState.activeDayPart === nextPart) {
+              return prevState;
+            }
+            return {
+              ...prevState,
+              selectedDate: freshKey,
+              activeDayPart: nextPart,
+              medications: dateChanged
+                ? normalizeMedicationsForDate(
                   prevState.medications,
                   freshKey,
                   prevState.selectedDate,
-                ),
-              }
-            : prevState,
-        );
+                )
+                : prevState.medications,
+            };
+          });
+          if (dateChanged) {
+            setIsDayPartAuto(true);
+          }
+        }
         return freshKey;
       });
     }
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') checkDateRollover();
+      if (document.visibilityState === 'visible') checkDateAndHourRollover();
     };
-    const interval = window.setInterval(checkDateRollover, 60_000);
-    window.addEventListener('focus', checkDateRollover);
+    const interval = window.setInterval(checkDateAndHourRollover, 60_000);
+    window.addEventListener('focus', checkDateAndHourRollover);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener('focus', checkDateRollover);
+      window.removeEventListener('focus', checkDateAndHourRollover);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
@@ -345,12 +368,12 @@ export function useSeroSafeStore() {
       const nextMeds = prev.medications.map((m) =>
         m.id === medId
           ? {
-              ...m,
-              todayStatus: status,
-              todayStatusDate: todayKey,
-              lastTakenIso:
-                status === 'TOOK' ? new Date().toISOString() : m.lastTakenIso,
-            }
+            ...m,
+            todayStatus: status,
+            todayStatusDate: todayKey,
+            lastTakenIso:
+              status === 'TOOK' ? new Date().toISOString() : m.lastTakenIso,
+          }
           : m,
       );
       const activeMeds = nextMeds.filter((m) => !m.isDiscontinued);
@@ -398,9 +421,9 @@ export function useSeroSafeStore() {
     setState((prev) =>
       prev
         ? {
-            ...prev,
-            medications: prev.medications.filter((m) => m.id !== medId),
-          }
+          ...prev,
+          medications: prev.medications.filter((m) => m.id !== medId),
+        }
         : prev,
     );
   }
@@ -428,18 +451,25 @@ export function useSeroSafeStore() {
   }
 
   function selectDayPart(part: DayPart) {
+    setIsDayPartAuto(false);
     setState((prev) => (prev ? { ...prev, activeDayPart: part } : prev));
+  }
+
+  function resetDayPartAuto() {
+    setIsDayPartAuto(true);
+    const clockPart = getDayPartForHour();
+    setState((prev) => (prev ? { ...prev, activeDayPart: clockPart } : prev));
   }
 
   function setPatternStatus(id: string, status: PatternInsight['status']) {
     setState((prev) =>
       prev
         ? {
-            ...prev,
-            patterns: prev.patterns.map((p) =>
-              p.id === id ? { ...p, status } : p,
-            ),
-          }
+          ...prev,
+          patterns: prev.patterns.map((p) =>
+            p.id === id ? { ...p, status } : p,
+          ),
+        }
         : prev,
     );
   }
@@ -489,9 +519,9 @@ export function useSeroSafeStore() {
       );
       const nextSettings = prev
         ? {
-            ...imported.settings,
-            pinEnabled: pinActive,
-          }
+          ...imported.settings,
+          pinEnabled: pinActive,
+        }
         : { ...imported.settings, pinEnabled: pinActive };
       const nextState: SeroSafeState = {
         ...imported,
@@ -519,10 +549,12 @@ export function useSeroSafeStore() {
         const freshToday = formatLocalDateKey();
         setTodayKey(freshToday);
         setEncryptionKey(key);
+        setIsDayPartAuto(true);
         setState({
           ...decrypted,
           settings: { ...decrypted.settings, pinEnabled: true },
           selectedDate: freshToday,
+          activeDayPart: getDayPartForHour(),
           medications: normalizeMedicationsForDate(
             decrypted.medications,
             freshToday,
@@ -594,6 +626,7 @@ export function useSeroSafeStore() {
     todayLog,
     assessment,
     activeLang,
+    isDayPartAuto,
     updateTodayLog,
     addHabit,
     deleteHabit,
@@ -605,6 +638,7 @@ export function useSeroSafeStore() {
     updateProfile,
     resetProfile,
     selectDayPart,
+    resetDayPartAuto,
     setPatternStatus,
     loadDemoScenario,
     loadCrisisSimulation,

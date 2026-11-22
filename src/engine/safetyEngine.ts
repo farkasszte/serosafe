@@ -2,15 +2,14 @@ import { CURATED_SUBSTANCES } from '@/data/substances';
 import type {
   ActionGuidanceLevel,
   CuratedSubstance,
-  DailyLogEntry,
-  HabitChip,
   ObservableSymptomEntry,
-  PatternInsight,
   StructuredAssessment,
   UserMedication,
   WashoutExposureInfo,
 } from '@/types/serosafe';
-import { daysBetweenDateKeys, formatLocalDateKey } from '@/utils/date';
+import { formatLocalDateKey } from '@/utils/date';
+
+export { computeExplainablePatterns } from '@/engine/patternEngine';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -367,134 +366,4 @@ export function evaluateRiskAndSymptoms(
     summaryReasonsEn: reasonsEn,
     sources: Array.from(sources),
   };
-}
-
-/**
- * Dinamikusan kiszámolja a valós naplókból származó magyarázható együttjárási mintázatokat.
- * Soha nem tesz ok-okozati állítást, megjelöli az érintett dátumokat és a zavaró tényezőket.
- */
-export function computeExplainablePatterns(
-  logs: DailyLogEntry[],
-  habits: HabitChip[],
-): PatternInsight[] {
-  const activeLogs = logs
-    .filter((l) => !l.isGap)
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const nDays = activeLogs.length;
-  const insights: PatternInsight[] = [];
-
-  if (nDays === 0) return insights;
-
-  // 1. Short sleep (<6h) -> next-day low energy (<50)
-  const sleepLowEnergyDates: string[] = [];
-  let shortSleepOpportunities = 0;
-  let caffeineCoDays = 0;
-
-  for (let i = 0; i < activeLogs.length - 1; i++) {
-    const cur = activeLogs[i];
-    const next = activeLogs[i + 1];
-    if (daysBetweenDateKeys(cur.date, next.date) !== 1) continue;
-    if (cur.sleepHours !== null && cur.sleepHours < 6) {
-      shortSleepOpportunities++;
-      if (next.energyLevel !== null && next.energyLevel < 55) {
-        sleepLowEnergyDates.push(next.date.slice(5));
-        if (cur.chipIds.includes('c_caffeine') || next.chipIds.includes('c_caffeine')) {
-          caffeineCoDays++;
-        }
-      }
-    }
-  }
-
-  if (sleepLowEnergyDates.length >= 2) {
-    const isEarly = nDays < 14 || sleepLowEnergyDates.length < 5;
-    insights.push({
-      id: 'pat_sleep_energy',
-      strong: !isEarly && sleepLowEnergyDates.length >= 5,
-      early: isEarly,
-      titleHu: `6 óránál kevesebb alvás után másnap alacsonyabb energia (${sleepLowEnergyDates.length} / ${shortSleepOpportunities} alkalom).`,
-      titleEn: `Sleep under 6h followed by lower next-day energy (${sleepLowEnergyDates.length} of ${shortSleepOpportunities} times).`,
-      descHu: isEarly
-        ? 'Még kevés adat áll rendelkezésre (minimum 14 nap és 5 egybeesés szükséges a biztosabb mintázathoz).'
-        : 'Az együttjárás több héten át ismétlődött; nem orvosi diagnózis.',
-      descEn: isEarly
-        ? 'Too early to conclude (at least 14 logged days and 5 occurrences are needed).'
-        : 'Repeated co-occurrence across weeks; descriptive observation, not a diagnosis.',
-      confoundersHu: `Együtt naplózva: koffein (${caffeineCoDays} nap)`,
-      confoundersEn: `Co-logged: caffeine (${caffeineCoDays} days)`,
-      matchingDates: sleepLowEnergyDates,
-      nDays,
-      status: 'shown',
-    });
-  }
-
-  // 2. Skipped/partial doses -> mental fog / overwhelmed emotion
-  const skippedDoseDates: string[] = [];
-  let lowAdherenceCount = 0;
-  for (const log of activeLogs) {
-    if (log.medsTakenPct !== null && log.medsTakenPct < 100) {
-      lowAdherenceCount++;
-      if (
-        log.chipIds.includes('c_fog') ||
-        log.emotions.includes('em_overwhelmed') ||
-        log.emotions.includes('em_confused') ||
-        log.emotions.includes('em_anxious')
-      ) {
-        skippedDoseDates.push(log.date.slice(5));
-      }
-    }
-  }
-
-  if (skippedDoseDates.length >= 2) {
-    const isEarly = nDays < 14 || skippedDoseDates.length < 5;
-    insights.push({
-      id: 'pat_meds_cog',
-      strong: !isEarly && skippedDoseDates.length >= 5,
-      early: isEarly,
-      titleHu: `Késleltetett vagy kihagyott adag napján szorongó/ködös állapot (${skippedDoseDates.length} / ${lowAdherenceCount} nap).`,
-      titleEn: `On delayed or skipped dose days: anxious or foggy state (${skippedDoseDates.length} of ${lowAdherenceCount} days).`,
-      descHu: 'Saját naplóbejegyzéseid időbeli egybeesése.',
-      descEn: 'Temporal co-occurrence from your personal diary logs.',
-      confoundersHu: 'Ellenőrizd az alvásidőt és a délutáni túlterhelést is.',
-      confoundersEn: 'Also check sleep duration and afternoon sensory load.',
-      matchingDates: skippedDoseDates,
-      nDays,
-      status: 'shown',
-    });
-  }
-
-  // 3. Positive restorative habit co-occurrence (e.g. walk / quiet time -> calm emotion)
-  const walkHabit = habits.find((h) => h.id === 'c_walk');
-  if (walkHabit) {
-    const walkDates: string[] = [];
-    let totalWalks = 0;
-    for (const log of activeLogs) {
-      if (log.chipIds.includes('c_walk')) {
-        totalWalks++;
-        if (log.emotions.includes('em_calm') || log.emotions.includes('em_content')) {
-          walkDates.push(log.date.slice(5));
-        }
-      }
-    }
-    if (walkDates.length >= 2) {
-      const isEarly = nDays < 14 || walkDates.length < 5;
-      insights.push({
-        id: 'pat_walk_calm',
-        strong: !isEarly && walkDates.length >= 5,
-        early: isEarly,
-        titleHu: `„Séta / természet” és nyugodt közérzet ugyanazon a napon (${walkDates.length} / ${totalWalks} nap).`,
-        titleEn: `"Walk / outdoors" and calm state on the same day (${walkDates.length} of ${totalWalks} days).`,
-        descHu: 'Együtt fordul elő a naplódban; bűntudat nélküli megfigyelés.',
-        descEn: 'Co-occurs in your personal logs; neutral observation.',
-        confoundersHu: 'Együtt naplózva: elegendő alvás és magasabb szenzoros tartalék.',
-        confoundersEn: 'Co-logged: adequate sleep and higher sensory reserve.',
-        matchingDates: walkDates,
-        nDays,
-        status: 'shown',
-      });
-    }
-  }
-
-  return insights;
 }

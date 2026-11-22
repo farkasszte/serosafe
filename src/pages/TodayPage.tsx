@@ -33,10 +33,12 @@ import type {
 interface TodayPageProps {
   lang: 'hu' | 'en';
   activeDayPart: DayPart;
+  isDayPartAuto?: boolean;
   todayLog: DailyLogEntry;
   habits: HabitChip[];
   doctorNote: DoctorReferenceNote | null;
   onSelectDayPart: (part: DayPart) => void;
+  onResetDayPartAuto?: () => void;
   onUpdateTodayLog: (
     updater: (prev: DailyLogEntry) => DailyLogEntry,
     options?: { recomputePatterns?: boolean },
@@ -45,7 +47,7 @@ interface TodayPageProps {
   onDeleteHabit?: (habitId: string) => void;
 }
 
-const OTHER_DAY_PARTS: DayPart[] = [
+const DAY_PARTS: DayPart[] = [
   'morning',
   'forenoon',
   'midday',
@@ -66,10 +68,12 @@ function isLoadFactor(chip: HabitChip): boolean {
 export function TodayPage({
   lang,
   activeDayPart,
+  isDayPartAuto = true,
   todayLog,
   habits,
   doctorNote,
   onSelectDayPart,
+  onResetDayPartAuto,
   onUpdateTodayLog,
   onAddHabit,
   onDeleteHabit,
@@ -228,28 +232,36 @@ export function TodayPage({
             {hu ? 'Mai állapot' : 'Today'}
           </h1>
 
-          {/* Dedicated "Most" row + balanced 6-slot DayPart group */}
-          <div
-            className="space-y-1.5"
-            role="group"
-            aria-label={hu ? 'Napszak' : 'Part of day'}
-          >
-            <button
-              type="button"
-              aria-pressed={activeDayPart === 'now'}
-              onClick={() => onSelectDayPart('now')}
-              className={`w-full py-2 px-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                activeDayPart === 'now'
-                  ? 'bg-accent text-ink-on-accent shadow-xs'
-                  : 'bg-surface-subtle text-ink border border-border hover:border-border-strong'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-              {hu ? 'Most — aktuális állapot' : 'Now — current check-in'}
-            </button>
+          {/* Auto-selected clock DayPart strip (user can tap any part to adjust) */}
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted">
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                <Clock className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
+                {isDayPartAuto
+                  ? hu
+                    ? 'Napszak (automatikus • felülírható)'
+                    : 'Part of day (auto-selected • tap to adjust)'
+                  : hu
+                    ? 'Napszak (kézzel módosítva)'
+                    : 'Part of day (manually selected)'}
+              </span>
+              {!isDayPartAuto && onResetDayPartAuto && (
+                <button
+                  type="button"
+                  onClick={onResetDayPartAuto}
+                  className="font-semibold text-accent hover:underline"
+                >
+                  {hu ? 'Vissza az aktuálisra' : 'Sync to current'}
+                </button>
+              )}
+            </div>
 
-            <div className="grid grid-cols-3 @[480px]:grid-cols-6 gap-1 p-1 rounded-2xl bg-surface-subtle">
-              {OTHER_DAY_PARTS.map((part) => {
+            <div
+              role="group"
+              aria-label={hu ? 'Napszak' : 'Part of day'}
+              className="grid grid-cols-3 @[480px]:grid-cols-6 gap-1 p-1 rounded-2xl bg-surface-subtle"
+            >
+              {DAY_PARTS.map((part) => {
                 const active = activeDayPart === part;
                 return (
                   <button
@@ -259,7 +271,7 @@ export function TodayPage({
                     onClick={() => onSelectDayPart(part)}
                     className={`py-1.5 px-2 rounded-xl text-xs text-center transition ${
                       active
-                        ? 'bg-surface text-ink font-bold shadow-xs'
+                        ? 'bg-accent text-ink-on-accent font-bold shadow-xs'
                         : 'text-ink-muted font-medium hover:text-ink'
                     }`}
                   >

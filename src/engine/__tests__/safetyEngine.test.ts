@@ -38,7 +38,7 @@ import type {
   ObservableSymptomEntry,
   UserMedication,
 } from '@/types/serosafe';
-import { daysBetweenDateKeys } from '@/utils/date';
+import { daysBetweenDateKeys, getDayPartForHour, normalizeDayPart } from '@/utils/date';
 
 const NOW = new Date('2026-11-21T12:00:00Z');
 
@@ -276,12 +276,25 @@ describe('Anatomical separation (Mouth vs Throat & CHOIR views)', () => {
     expect(qualityIds).toContain('pressing');
   });
 
-  it('defaults DayPart to now and includes forenoon in bilingual i18n dayParts', () => {
-    expect(createDemoDataset('hu', 'light').activeDayPart).toBe('now');
-    expect(createCleanDataset('en', 'light').activeDayPart).toBe('now');
-    expect(STRINGS.hu.today.dayParts.now).toBe('Most');
+  it('automatically resolves DayPart from clock hour without "now" and normalizes legacy backups', () => {
+    expect(getDayPartForHour(new Date(2026, 10, 22, 7, 30))).toBe('morning');
+    expect(getDayPartForHour(new Date(2026, 10, 22, 10, 0))).toBe('forenoon');
+    expect(getDayPartForHour(new Date(2026, 10, 22, 13, 0))).toBe('midday');
+    expect(getDayPartForHour(new Date(2026, 10, 22, 16, 0))).toBe('afternoon');
+    expect(getDayPartForHour(new Date(2026, 10, 22, 20, 0))).toBe('evening');
+    expect(getDayPartForHour(new Date(2026, 10, 22, 23, 30))).toBe('night');
+    expect(getDayPartForHour(new Date(2026, 10, 22, 3, 0))).toBe('night');
+
+    const refHour = new Date(2026, 10, 22, 10, 15);
+    expect(normalizeDayPart('now', refHour)).toBe('forenoon');
+    expect(normalizeDayPart('evening', refHour)).toBe('evening');
+
+    const demoPart = createDemoDataset('hu', 'light').activeDayPart;
+    const cleanPart = createCleanDataset('en', 'light').activeDayPart;
+    expect(['morning', 'forenoon', 'midday', 'afternoon', 'evening', 'night']).toContain(demoPart);
+    expect(['morning', 'forenoon', 'midday', 'afternoon', 'evening', 'night']).toContain(cleanPart);
+
     expect(STRINGS.hu.today.dayParts.forenoon).toBe('Délelőtt');
-    expect(STRINGS.en.today.dayParts.now).toBe('Now');
     expect(STRINGS.en.today.dayParts.forenoon).toBe('Late morning');
   });
 
@@ -463,7 +476,7 @@ describe('Anatomical separation (Mouth vs Throat & CHOIR views)', () => {
     const makeDay = (date: string, sleepHours: number, energyLevel: number): DailyLogEntry => ({
       date,
       isGap: false,
-      dayPartsLogged: ['now'],
+      dayPartsLogged: ['morning'],
       emotions: [],
       energyLevel,
       sensoryBattery: 70,
@@ -499,11 +512,74 @@ describe('Anatomical separation (Mouth vs Throat & CHOIR views)', () => {
     expect(computeExplainablePatterns(consecutiveLogs, []).some((p) => p.id === 'pat_sleep_energy')).toBe(true);
   });
 
+  it('dynamically discovers patterns from user-created custom habits while filtering non-enriched baseline noise', () => {
+    const customNoiseHabit = {
+      id: 'c_custom_noise',
+      group: 'social' as const,
+      labelHu: 'Zajos bevásárlás',
+      labelEn: 'Noisy shopping',
+      intent: 'observation',
+    };
+    const dailyRoutineHabit = {
+      id: 'c_ate',
+      group: 'activity' as const,
+      labelHu: 'Rendszeres étkezés',
+      labelEn: 'Regular meals',
+      intent: 'objective',
+    };
+
+    const makeLog = (
+      date: string,
+      sensoryBattery: number,
+      chipIds: string[],
+    ): DailyLogEntry => ({
+      date,
+      isGap: false,
+      dayPartsLogged: ['afternoon'],
+      emotions: sensoryBattery < 40 ? ['em_overwhelmed'] : ['em_calm'],
+      energyLevel: sensoryBattery,
+      sensoryBattery,
+      sleepHours: 7.5,
+      wokeAtNight: false,
+      bodyRegions: [],
+      bodySensations: [],
+      chipIds,
+      note: '',
+      addedLater: false,
+      medsTakenPct: 100,
+    });
+
+    const dynamicLogs: DailyLogEntry[] = [
+      makeLog('2026-11-01', 25, ['c_custom_noise', 'c_ate', 'c_masking']),
+      makeLog('2026-11-02', 82, ['c_ate']),
+      makeLog('2026-11-03', 80, ['c_ate']),
+      makeLog('2026-11-04', 30, ['c_custom_noise', 'c_ate', 'c_masking']),
+      makeLog('2026-11-05', 85, ['c_ate']),
+      makeLog('2026-11-06', 28, ['c_custom_noise', 'c_masking']),
+    ];
+
+    const discovered = computeExplainablePatterns(dynamicLogs, [
+      customNoiseHabit,
+      dailyRoutineHabit,
+    ]);
+
+    const noisePattern = discovered.find((p) =>
+      p.id.startsWith('pat_habit_c_custom_noise'),
+    );
+    expect(noisePattern).toBeDefined();
+    expect(noisePattern?.titleHu).toContain('Zajos bevásárlás');
+    expect(noisePattern?.matchingDates).toEqual(['11-01', '11-04', '11-06']);
+    expect(noisePattern?.confoundersHu).toContain('maszkolás fáradtság');
+
+    // `c_ate` is logged on both calm (3x) and strained (2x) days -> no enrichment above baseline -> excluded!
+    expect(discovered.some((p) => p.id.startsWith('pat_habit_c_ate'))).toBe(false);
+  });
+
   it('syncs symptomSync cleanly, filters expired meds in TTS, and validates imported JSON backups', () => {
     const emptyLog: DailyLogEntry = {
       date: '2026-11-21',
       isGap: false,
-      dayPartsLogged: ['now'],
+      dayPartsLogged: ['forenoon'],
       emotions: [],
       energyLevel: 70,
       sensoryBattery: 70,
@@ -517,11 +593,11 @@ describe('Anatomical separation (Mouth vs Throat & CHOIR views)', () => {
       medsTakenPct: null,
     };
 
-    const toggledOn = applySensationToggle(emptyLog, 'chest_racing', 'now');
+    const toggledOn = applySensationToggle(emptyLog, 'chest_racing', 'forenoon');
     expect(toggledOn.bodyRegions).toEqual(['chest']);
     expect(toggledOn.symptomEntry?.hasRestingTachycardia).toBe(true);
 
-    const toggledOff = applySensationToggle(toggledOn, 'chest_racing', 'now');
+    const toggledOff = applySensationToggle(toggledOn, 'chest_racing', 'forenoon');
     expect(toggledOff.symptomEntry).toBeUndefined();
 
     const withTemp = applySymptomFieldUpdate(emptyLog, 'measuredTempCelsius', 38.4);

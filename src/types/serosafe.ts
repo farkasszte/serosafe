@@ -172,7 +172,6 @@ export interface EmotionWheelNode {
 }
 
 export type DayPart =
-  | 'now'
   | 'morning'
   | 'forenoon'
   | 'midday'

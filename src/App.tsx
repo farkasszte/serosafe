@@ -152,10 +152,12 @@ export function App() {
               <TodayPage
                 lang={lang}
                 activeDayPart={state.activeDayPart}
+                isDayPartAuto={store.isDayPartAuto}
                 todayLog={todayLog}
                 habits={state.habits}
                 doctorNote={state.doctorNote}
                 onSelectDayPart={store.selectDayPart}
+                onResetDayPartAuto={store.resetDayPartAuto}
                 onUpdateTodayLog={store.updateTodayLog}
                 onAddHabit={store.addHabit}
                 onDeleteHabit={store.deleteHabit}

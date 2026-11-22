@@ -5,6 +5,7 @@ import type {
   SeroSafeState,
   UserMedication,
 } from '@/types/serosafe';
+import { normalizeDayPart } from '@/utils/date';
 
 function isPlainRecord(val: unknown): val is Record<string, unknown> {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
@@ -42,7 +43,11 @@ export function validateImportedState(raw: unknown): SeroSafeState | null {
     return {
       date: rec.date,
       isGap: Boolean(rec.isGap),
-      dayPartsLogged: Array.isArray(rec.dayPartsLogged) ? rec.dayPartsLogged : [],
+      dayPartsLogged: Array.isArray(rec.dayPartsLogged)
+        ? Array.from(
+            new Set(rec.dayPartsLogged.map((dp) => normalizeDayPart(dp))),
+          )
+        : [],
       emotions: Array.isArray(rec.emotions) ? rec.emotions : [],
       energyLevel:
         typeof rec.energyLevel === 'number' ? rec.energyLevel : null,
@@ -180,9 +185,6 @@ export function validateImportedState(raw: unknown): SeroSafeState | null {
       typeof raw.selectedDate === 'string' && dateRe.test(raw.selectedDate)
         ? raw.selectedDate
         : baseline.selectedDate,
-    activeDayPart:
-      typeof raw.activeDayPart === 'string'
-        ? (raw.activeDayPart as SeroSafeState['activeDayPart'])
-        : 'now',
+    activeDayPart: normalizeDayPart(raw.activeDayPart),
   };
 }

@@ -1,5 +1,38 @@
+import type { DayPart } from '@/types/serosafe';
+
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const DATE_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const VALID_DAY_PARTS: readonly DayPart[] = [
+  'morning',
+  'forenoon',
+  'midday',
+  'afternoon',
+  'evening',
+  'night',
+];
+
+/** Automatically resolves the calendar part-of-day matching the local clock hour. */
+export function getDayPartForHour(d: Date = new Date()): DayPart {
+  const hour = d.getHours();
+  if (hour >= 5 && hour < 9) return 'morning';
+  if (hour >= 9 && hour < 12) return 'forenoon';
+  if (hour >= 12 && hour < 14) return 'midday';
+  if (hour >= 14 && hour < 18) return 'afternoon';
+  if (hour >= 18 && hour < 22) return 'evening';
+  return 'night';
+}
+
+/** Normalizes persisted/imported DayPart values (mapping legacy `'now'` to current clock hour). */
+export function normalizeDayPart(value: unknown, d: Date = new Date()): DayPart {
+  if (
+    typeof value === 'string' &&
+    (VALID_DAY_PARTS as readonly string[]).includes(value)
+  ) {
+    return value as DayPart;
+  }
+  return getDayPartForHour(d);
+}
 
 /** Formats a Date as local calendar `YYYY-MM-DD` (never UTC-shifted). */
 export function formatLocalDateKey(d: Date = new Date()): string {
