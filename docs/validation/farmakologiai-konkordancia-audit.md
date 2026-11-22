@@ -145,15 +145,18 @@ Az alábbi **9 konkrét szakmai kérdést** szükséges átbeszélni és írásb
 
 ---
 
-## 6. Automatizált konkordancia-tesztkészlet
+## 6. Automatizált konkordancia- és biztonsági tesztkészlet
 
-A manuális táblázat mellett a projekt tartalmazza a gépileg futtatható [`src/engine/__tests__/concordance.test.ts`](../../src/engine/__tests__/concordance.test.ts) tesztcsomagot, amely minden build előtt automatikusan lefuttatható (`bun run test`):
+A manuális táblázat mellett a projekt tartalmazza a teljes, gépileg futtatható Vitest validációs csomagot (**3 tesztfájl, 29/29 sikeres teszt** minden build előtt `bun run test` paranccsal ellenőrizve):
 
-- **35/35 anyag-konzisztencia ellenőrzés:** A [`substances-audit-table.csv`](./substances-audit-table.csv) minden `id`, `drug_class`, `mechanisms`, `is_otc_or_supplement` és `clinical_washout_days` mezője megegyezik a forráskóddal.
-- **435/435 pár-teszt:** A [`concordance-matrix-30x30.csv`](./concordance-matrix-30x30.csv) mind a 435 egyedi párján lefuttatja az `evaluateRiskAndSymptoms` motort, és ellenőrzi az elvárt döntési szint (`CONSULT`), a `hasContraindicatedMAOI` jelző, az aktív szerotonerg darabszám (`2`) és a forráshivatkozás meglétét.
-- **30/30 egyedüli hatóanyag Anti-Reassurance próba:** Igazolja, hogy önmagában egyetlen szerre sem ad vissza `SAFE`/`GREEN` eredményt (`INFO_LOGGED`).
-- **60/60 klinikai washout határérték-teszt:** Minden egyes hatóanyagra teszteli a `clinicalWashoutDays - 1` napos (aktív kiürülés → `CONSULT`) és `clinicalWashoutDays + 1` napos (kiürült → `INFO_LOGGED`) viselkedést.
-- **Klinikai referenciapróba (Vignetták):** Fluoxetin 34 vs. 36 nap + mind az 5 MAOI; SSRI/SNRI + DXM / Orbáncfű / 5-HTP / L-triptofán / Tramadol; kórházi Linezolid és Metilénkék; 5 nem-szerotonerg társgyógyszer negatív kontroll; Aripiprazol/Riszperidon + 38,5 °C láz + izommerevség → `CALL_EMERGENCY_112` (NMS védelem).
+- **Farmakológiai konkordancia ([`src/engine/__tests__/concordance.test.ts`](../../src/engine/__tests__/concordance.test.ts) — 5 teszt):**
+  - **35/35 anyag-konzisztencia ellenőrzés:** A [`substances-audit-table.csv`](./substances-audit-table.csv) minden `id`, `drug_class`, `mechanisms`, `is_otc_or_supplement` és `clinical_washout_days` mezője megegyezik a forráskóddal.
+  - **435/435 pár-teszt:** A [`concordance-matrix-30x30.csv`](./concordance-matrix-30x30.csv) mind a 435 egyedi párján lefuttatja az `evaluateRiskAndSymptoms` motort, és ellenőrzi az elvárt döntési szint (`CONSULT`), a `hasContraindicatedMAOI` jelző, az aktív szerotonerg darabszám (`2`) és a forráshivatkozás meglétét.
+  - **30/30 egyedüli hatóanyag Anti-Reassurance próba:** Igazolja, hogy önmagában egyetlen szerre sem ad vissza `SAFE`/`GREEN` eredményt (`INFO_LOGGED`).
+  - **60/60 klinikai washout határérték-teszt:** Minden egyes hatóanyagra teszteli a `clinicalWashoutDays - 1` napos (aktív kiürülés → `CONSULT`) és `clinicalWashoutDays + 1` napos (kiürült → `INFO_LOGGED`) viselkedést.
+  - **Klinikai referenciapróba (Vignetták):** Fluoxetin 34 vs. 36 nap + mind az 5 MAOI; SSRI/SNRI + DXM / Orbáncfű / 5-HTP / L-triptofán / Tramadol; kórházi Linezolid és Metilénkék; 5 nem-szerotonerg társgyógyszer negatív kontroll; Aripiprazol/Riszperidon + 38,5 °C láz + izommerevség → `CALL_EMERGENCY_112` (NMS védelem).
+- **Motor-, riasztás- és adatmodell-tesztek ([`src/engine/__tests__/safetyEngine.test.ts`](../../src/engine/__tests__/safetyEngine.test.ts) — 21 teszt):** Ellenőrzi a tünet-szinkronizációt (`symptomSync.ts`), a 2×2-es kontingencia-alapú determinisztikus mintázat-felfedést (`patternEngine.ts`), az automatikus napszakfelismerést, a JSON-mentés validációját (`backup.ts`), valamint a megerősítéssel halkítható, de új figyelmeztető tünetre vagy szerváltozásra automatikusan visszatérő `CONSULT` riasztáslogikát (`consultAlert.ts`; 112-es vészjelzés soha nem halkítható).
+- **Helyi titkosítási tesztek ([`src/services/__tests__/crypto.test.ts`](../../src/services/__tests__/crypto.test.ts) — 3 teszt):** PBKDF2 + AES-GCM kulcsszármaztatás, PIN-verifikáció és hibás PIN elutasítása.
 
 ---
 
@@ -163,7 +166,7 @@ A manuális táblázat mellett a projekt tartalmazza a gépileg futtatható [`sr
 | --- | --- | --- |
 | **Név és szakképesítés / pecsétszám** | ...................................................... | ...................................................... |
 | **Intézmény** | ...................................................... | ...................................................... |
-| **Ellenőrzött állomány verziója** | SeroSafe MVP v1.0 (30+5 tétel, 435 pár) | SeroSafe MVP v1.0 (30+5 tétel, 435 pár) |
+| **Ellenőrzött állomány verziója** | SeroSafe MVP v1.1 (2026.11.22., 30+5 tétel, 435 pár, 29/29 Vitest) | SeroSafe MVP v1.1 (2026.11.22., 30+5 tétel, 435 pár, 29/29 Vitest) |
 | **Mely pontok elfogadottak módosítás nélkül?** | [ ] 1–30 tétel [ ] Washout idők | [ ] Tünetlisták [ ] NMS/112 határérték |
 | **Módosítási / pontosítási javaslat (5. fejezet sorszámai)** | ...................................................... | ...................................................... |
 | **Dátum és aláírás** | 2026. .... . .... .................................. | 2026. .... . .... .................................. |

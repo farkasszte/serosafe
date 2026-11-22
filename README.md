@@ -25,15 +25,15 @@ Autizmus spektrum zavarral (ASD) és alexitímiával élő személyeknél három
 
 ## A négy fő pillér
 
-1. **Kurált 30 hatóanyagos szerotonerg és kiürülési (washout) szűrő (`src/data/substances.ts`, `src/engine/safetyEngine.ts`):**
-   Hazai (OGYÉI) forgalomban lévő és OTC/kiegészítő hatóanyagok `clinicalWashoutDays` ablakokkal, „Mi történne, ha bevenném?” ellenőrzővel, forrásjelzéssel és vizuális visszaszámláló ívvel (`WashoutArc`). Külön `nmsWatch` figyeléssel az antipszichotikumokra (Malignus Neuroleptikus Szindróma védelem).
-2. **Alexitímia-barát, metaforamentes önmegfigyelés:**
-   Dr. Gloria Willcox-ihletésű Nyílt Érzelemkerék (`EmotionWheel`), CHOIR-ihletésű elölnézeti / hátulnézeti / nagyított fej–száj–torok testséma (`BodyMap`) fájdalomskálával és fájdalomminőségekkel, valamint vizuális energia-, szenzoros akkumulátor- és alvásidő-tárcsák (`EnergySensoryDial`).
+1. **Kurált 30 hatóanyagos szerotonerg és kiürülési (washout) szűrő (`src/data/substances.ts`, `src/engine/safetyEngine.ts`, `src/engine/consultAlert.ts`):**
+   Hazai (OGYÉI) forgalomban lévő és OTC/kiegészítő hatóanyagok `clinicalWashoutDays` ablakokkal, kereshető „Mi történne, ha bevenném?” ellenőrzővel, forrásjelzéssel és vizuális visszaszámláló ívvel (`WashoutArc`). Külön `nmsWatch` figyeléssel az antipszichotikumokra (Malignus Neuroleptikus Szindróma védelem), valamint megerősítéssel halkítható, de új figyelmeztető tünetre vagy szerváltozásra automatikusan visszatérő `CONSULT` figyelmeztetéssel (a `112` riasztás soha nem halkítható).
+2. **Alexitímia-barát, metaforamentes önmegfigyelés és determinisztikus mintázatfelfedés (`src/engine/patternEngine.ts`):**
+   Dr. Gloria Willcox-ihletésű Nyílt Érzelemkerék (`EmotionWheel`), CHOIR-ihletésű elölnézeti / hátulnézeti / nagyított fej–száj–torok testséma (`BodyMap`) fájdalomskálával és fájdalomminőségekkel, vizuális energia-, szenzoros akkumulátor- és alvásidő-tárcsák (`EnergySensoryDial`), automatikus óraalapú napszakválasztás, alapértelmezett `%`-mentes nézet, valamint külön választható **Egyszerűsített mód (max. 4 opció)**. A 2×2-es kontingencia-alapú offline `patternEngine` a saját (és egyéni) szokások valós együttjárását tárja fel zajszűréssel és visszaállítható mintalistával.
 3. **Kettős útvonalú (Dual-Pathway) sürgősségi hozzáférés:**
-   - **Nulladik másodperces Kríziskártya (`CrisisCardDialog`):** minden képernyőről egy koppintással elérhető MIST-sorrendű átadási lap, közvetlen `tel:112` gombbal és magyar/angol hangos felolvasással (TTS).
+   - **Nulladik másodperces Kríziskártya (`CrisisCardDialog`):** minden képernyőről egy koppintással elérhető, 390 px-es mobilon görgetés nélküli MIST-áttekintőt nyújtó átadási lap, közvetlen `tel:112` gombbal és magyar/angol hangos felolvasással (TTS).
    - **Zárolási képernyő háttérkép + offline QR-kód (`lockscreenGenerator.ts`):** 1080×1920 PNG generátor HTML5 Canvas-szal, amely telefonfeloldás nélkül is olvashatóvá teszi a kommunikációs akadályokat, az utolsó gyógyszerbevételeket és a vitális adatokat.
 4. **100% kliensoldali, szervermentes (Zero-Server) PWA & titkosítás:**
-   Minden adat helyben, a böngésző `IndexedDB` tárhelyén (`Dexie.js`) marad. Opcionálisan PBKDF2 + WebCrypto AES-GCM PIN-zárral titkosítható, megtartva a PIN nélküli sürgősségi krízis-hozzáférést.
+   Minden adat helyben, a böngésző `IndexedDB` tárhelyén (`Dexie.js`) marad. Opcionálisan PBKDF2 + WebCrypto AES-GCM PIN-zárral titkosítható, megtartva a PIN nélküli sürgősségi krízis-hozzáférést, 2 lépéses megerősítéssel minden adatvesztő műveletnél.
 
 ---
 
@@ -41,8 +41,8 @@ Autizmus spektrum zavarral (ASD) és alexitímiával élő személyeknél három
 
 - `src/` – Alkalmazásforráskód:
   - `components/` – UI komponensek (`layout/`, `modals/`, `visuals/`)
-  - `data/` – Kurált 30 szerotonerg + 5 társgyógyszer hatóanyag-adatbázis (`substances.ts`) és CHOIR testtérkép-régiók (`choirBodyRegions.ts`)
-  - `engine/` – Farmakológiai interakció- és kiürülési motor (`safetyEngine.ts`) és Vitest tesztek (`__tests__/`)
+  - `data/` – Kurált 30 szerotonerg + 5 társgyógyszer hatóanyag-adatbázis (`substances.ts`), Willcox érzelemkerék (`emotionWheel.ts`) és CHOIR testtérkép-régiók (`choirBodyRegions.ts`)
+  - `engine/` – Farmakológiai interakció- és kiürülési motor (`safetyEngine.ts`), offline 2×2-es mintázatmotor (`patternEngine.ts`), konzultációs sáv-ujjlenyomat (`consultAlert.ts`), tünet-szinkronizáló (`symptomSync.ts`) és Vitest tesztek (`__tests__/`: 29 teszt)
   - `pages/` – Fő nézetek (*Ma*, *Gyógyszer*, *Naptár*, *Elemzés*, *Biztonság*, *Jogi nyilatkozat*)
   - `services/` – IndexedDB (`db.ts`), PBKDF2 + AES-GCM titkosítás (`crypto.ts`), zárolási képernyő-generátor (`lockscreenGenerator.ts`), lokalizáció (`i18n.ts`), TTS (`tts.ts`) és demó előbeállítások (`demoData.ts`)
   - `styles/` & `types/` – Tailwind v4 dizájntokenek (`tokens.css`, `app.css`) és TypeScript típusdefiníciók (`serosafe.ts`)

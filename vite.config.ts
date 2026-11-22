@@ -4,7 +4,13 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
+const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1];
+const base =
+  process.env.VITE_BASE_PATH ??
+  (process.env.GITHUB_ACTIONS === 'true' && repoName ? `/${repoName}/` : '/');
+
 export default defineConfig({
+  base,
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
@@ -51,8 +57,8 @@ export default defineConfig({
         description:
           '100% offline, neurodivergens-barát szerotonerg gyógyszerkockázati és sürgősségi kommunikációs rendszer.',
         lang: 'hu',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         display: 'standalone',
         orientation: 'portrait-primary',
         theme_color: '#345849',

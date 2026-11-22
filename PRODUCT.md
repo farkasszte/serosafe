@@ -45,7 +45,7 @@ Unlike generic pill reminders (which ignore OTC serotonergic overlap and clinica
 
 - Project specification and OTIO validation plan in [SeroSafe projektterv végső optimalizálása.md](docs/otio/SeroSafe%20projektterv%20v%C3%A9gs%C5%91%20optimaliz%C3%A1l%C3%A1sa.md).
 - Reference HTML prototypes in [serosafe_neurodivergens_t_mogat_s_biztons_gi_app.html](docs/prototypes/serosafe_neurodivergens_t_mogat_s_biztons_gi_app.html) and [serosafe_v3_mobile_swipe_prototype.html](docs/prototypes/serosafe_v3_mobile_swipe_prototype.html).
-- Curated 30-substance matrix in `src/data/substances.ts`, deterministic unit test suite (`src/engine/__tests__/safetyEngine.test.ts`, `src/services/__tests__/crypto.test.ts`), and 1-click demo/crisis presets (`src/services/demoData.ts`) for jury and paramedic simulation.
+- Curated 30-substance matrix in `src/data/substances.ts`, deterministic unit test suite (`src/engine/__tests__/concordance.test.ts` — 5 tests covering 435 pairs & 60 washout boundaries, `src/engine/__tests__/safetyEngine.test.ts` — 21 tests, `src/services/__tests__/crypto.test.ts` — 3 tests), offline contingency pattern discovery (`src/engine/patternEngine.ts`), confirmation-gated consult alert state (`src/engine/consultAlert.ts`), optional `<= 4`-option `simplifiedMode`, and protected OTIO demo/crisis presets (`src/services/demoData.ts`).
 
 ## Product Principles
 

@@ -397,18 +397,18 @@ A projekt célja egy 100%-ban offline, kliensoldalon működő, neurodivergens-b
 
 **Előzetesen elvégzett munka (Kész eredmények):**
 
-> * Elkészült a 100%-ban kliensoldalon és offline működő PWA prototípus (React 19, TypeScript, Vite, Tailwind CSS v4, IndexedDB / Dexie.js, opcionális WebCrypto PBKDF2 + AES-GCM PIN-védelem) és a 30 hazai szerotonerg hatóanyagot + 5 társgyógyszert kezelő kiürülési (washout) szabálymotor.  
-> * Megvalósult a kétnyelvű, alacsony kognitív terhelésű felület (Willcox-féle Nyílt Érzelemkerék, CHOIR-ihletésű 3 nézetes anatómiai testséma 0–10 fájdalomskálával), a nulladik másodperces MIST Kríziskártya (112 hívógomb + magyar/angol TTS) és a HTML5 Canvas alapú zárolási képernyő + offline QR generátor.  
-> * Elvégeztük az EU MDR / MDCG 2019-11 hatáselemzést (Anti-Reassurance / NMS-védelem), és elkészült a 30×30-as (435 pár) és 60 kiürülési határérték-tesztes automatizált farmakológiai konkordancia-csomag (Vitest, 23/23 sikeres teszt) a szakorvosi audithoz.
+> * Elkészült a 100%-ban kliensoldalon és offline működő PWA prototípus (React 19, TypeScript, Vite, Tailwind CSS v4, IndexedDB / Dexie.js, WebCrypto PBKDF2 + AES-GCM PIN-védelem), a 30 hazai szerotonerg hatóanyagot + 5 társgyógyszert kezelő kiürülési (washout) szabálymotor, valamint a determinisztikus, 2×2-es kontingencia-alapú mintázatfelfedő motor.  
+> * Megvalósult a kétnyelvű, alacsony kognitív terhelésű felület (Willcox-féle Nyílt Érzelemkerék, CHOIR-ihletésű 3 nézetes testséma, külön választható ≤4 opciós Egyszerűsített mód, automatikus óraalapú napszakválasztás, alapértelmezett %-mentes nézet és 2 lépéses törlésvédelem), a mobilra (390 px) optimalizált 0 mp-es MIST Kríziskártya (112 hívógomb + HU/EN TTS) és az 1080×1920-as zárolási PNG + offline QR generátor.  
+> * Elvégeztük az EU MDR / MDCG 2019-11 hatáselemzést (Anti-Reassurance / NMS-védelem; megerősítéssel halkítható, de új figyelmeztető tünetnél vagy szerváltozásnál automatikusan visszatérő CONSULT figyelmeztetés), és elkészült a 30×30-as (435 pár) és 60 kiürülési határérték-tesztes automatizált validációs csomag (Vitest, 29/29 sikeres teszt 3 fájlban) a szakorvosi audithoz.
 
 **Elvégzendő munka és ütemezés (4 fő munkaszakasz):**
 
 > 1. **Farmakológiai adatbázis szakértői auditja (1–2. hónap):** A már elkészült 30+5 tételes hazai adatbázis, a 435 páros konkordancia-mátrix és a 9 nyitott klinikai kérdés (pl. moklobemid aszimmetrikus kiürülése, MAO-B dózisfüggés, triptán/mirtazapin besorolás) tételes validálása klinikai gyógyszerész és pszichiáter szakorvos mentorokkal.  
-> 2. **PWA prototípus klinikai finomhangolása és mobilcsomagolása (2–3. hónap):** A szakértői audit módosításainak átvezetése a szabálymotorra, a direkt bináris vészjel-választó ergonomiai finomítása, valamint a telepíthető Android/iOS (Capacitor / PWA) és zárolási képernyő (HTML5 Canvas + offline QR) nézetek véglegesítése.  
+> 2. **PWA prototípus klinikai finomhangolása és mobilcsomagolása (2–3. hónap):** A szakértői audit módosításainak átvezetése a szabálymotorra, az empirikus teszteléshez használt szimulációs módok (OTIO A/B és krízis-előbeállítás) véglegesítése, valamint a telepíthető Android/iOS (Capacitor 8 / PWA) csomagolás lezárása.  
 > 3. **Empirikus tesztelés és adatfelvétel (4. hónap):**  
    * *A/B szimulációs teszt (10-15 mentőápoló / orvostanhallgató):* A kritikus adatok kinyerési idejének (másodperc) és pontosságának (%) mérése hagyományos zárójelentés-fotók (Kontroll) és a SeroSafe Kríziskártya (Kísérleti) összevetésével.  
    * *UX és biztonsági teszt (10-15 ASD / alexitímiás önkéntes):* System Usability Scale (SUS) és NASA-TLX mérés szimulált stresszhelyzetben, valamint a segélyhívási hajlandóság ellenőrzése.  
-> 4. **Kiértékelés és dokumentáció (5. hónap):** Statisztikai elemzés, a nyilvános forráskódú, nem kereskedelmi (PolyForm Noncommercial 1.0.0 / CC BY-NC-SA 4.0) kódbázis és a versenyprezentáció véglegesítése.
+> 4. **Kiértékelés és dokumentáció (5. hónap):** Statisztikai elemzés, a nyilvános forráskódú, nem kereskedelmi (PolyForm Noncommercial 1.0.0 / CC BY-NC-SA 4.0) GitHub-kódbázis és a versenyprezentáció véglegesítése.
 
 ## **A projekt újdonságtartalma, innovációs elemei**
 
