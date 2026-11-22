@@ -169,7 +169,7 @@ export const STRINGS = {
     insights: {
       range14: '14 nap',
       range30: '30 nap',
-      range90: '45 nap',
+      range45: '45 nap',
       timelineTitle: 'Döntések és utólagos reakciók idővonala',
       patternsTitle: 'Feltárt mintázatok',
       strongOnly: 'Csak erős minták',
@@ -253,7 +253,7 @@ export const STRINGS = {
     insights: {
       range14: '14d',
       range30: '30d',
-      range90: '45d',
+      range45: '45d',
       timelineTitle: 'Decisions & 24h reactions timeline',
       patternsTitle: 'Observed patterns',
       strongOnly: 'Strong only',

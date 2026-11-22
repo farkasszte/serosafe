@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
   ArrowRight,
+  BellOff,
   Calendar,
   LineChart,
   Monitor,
@@ -13,9 +14,14 @@ import {
   ShieldCheck,
   Smartphone,
 } from 'lucide-react';
+import {
+  buildConsultSignature,
+  isConsultQuietedForState,
+} from '@/engine/consultAlert';
 import { STRINGS } from '@/services/i18n';
 import type {
   AppSettings,
+  ObservableSymptomEntry,
   PageTab,
   StructuredAssessment,
 } from '@/types/serosafe';
@@ -25,6 +31,8 @@ interface AppShellProps {
   isLegalView?: boolean;
   settings: AppSettings;
   assessment: StructuredAssessment;
+  todaySymptom?: ObservableSymptomEntry;
+  todayBodySensations?: string[];
   onSelectTab: (tab: PageTab) => void;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   onOpenCrisisCard: () => void;
@@ -40,6 +48,8 @@ export function AppShell({
   isLegalView = false,
   settings,
   assessment,
+  todaySymptom,
+  todayBodySensations = [],
   onSelectTab,
   onUpdateSettings,
   onOpenCrisisCard,
@@ -51,7 +61,24 @@ export function AppShell({
   const hu = settings.lang === 'hu';
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [confirmQuietOpen, setConfirmQuietOpen] = useState(false);
   const isMobilePreview = settings.desktopFrameMode === 'mobile-preview';
+
+  const consultSignature = buildConsultSignature(
+    assessment,
+    todaySymptom,
+    todayBodySensations,
+  );
+  const isConsultQuieted = isConsultQuietedForState(
+    settings,
+    assessment,
+    todaySymptom,
+    todayBodySensations,
+  );
+
+  useEffect(() => {
+    setConfirmQuietOpen(false);
+  }, [consultSignature, assessment.level]);
 
   const navItems: {
     id: PageTab;
@@ -292,75 +319,154 @@ export function AppShell({
             }`}
           >
             {/* Global Persistent Consultation / Emergency Banner on non-Safety tabs */}
-            {hasSafetyFlag && activeTab !== 'safety' && (
-              <div
-                role={isEmergency ? 'alert' : 'status'}
-                className={`mb-3 @lg:mb-6 border-y @lg:border @lg:rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2.5 ${
-                  isEmergency
-                    ? 'bg-emergency-soft border-emergency-border'
-                    : 'bg-warning-soft border-warning-border'
-                }`}
-              >
-                <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                  {isEmergency ? (
-                    <AlertOctagon
-                      className="w-4 h-4 text-emergency shrink-0 mt-0.5"
-                      aria-hidden="true"
-                    />
-                  ) : (
+            {hasSafetyFlag &&
+              activeTab !== 'safety' &&
+              (isConsult && !isEmergency && isConsultQuieted ? (
+                <div
+                  role="status"
+                  className="mb-3 @lg:mb-5 border-y @lg:border @lg:rounded-2xl px-4 py-2 bg-warning-soft/45 border-warning-border flex flex-wrap items-center justify-between gap-2 text-xs"
+                >
+                  <span className="inline-flex items-center gap-2 font-semibold text-warning-ink">
                     <AlertTriangle
-                      className="w-4 h-4 text-warning-ink shrink-0 mt-0.5"
+                      className="w-3.5 h-3.5 shrink-0"
                       aria-hidden="true"
                     />
-                  )}
-                  <div className="min-w-0 space-y-0.5">
-                    <div
-                      className={`text-xs font-bold ${
-                        isEmergency ? 'text-emergency' : 'text-warning-ink'
-                      }`}
-                    >
-                      {isEmergency
-                        ? hu
-                          ? 'Azonnali sürgősségi jelzés — Hívd a 112-t!'
-                          : 'Immediate emergency alert — Call 112!'
-                        : hu
-                          ? 'Orvosi vagy gyógyszerészi konzultáció javasolt'
-                          : 'Doctor or pharmacist consultation recommended'}
-                    </div>
-                    {primaryReason && (
-                      <p className="text-xs text-ink leading-snug">
-                        {primaryReason}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {isEmergency && (
+                    {hu
+                      ? 'Konzultációs állapot aktív (halkítva) — új tünetnél automatikusan visszatér'
+                      : 'Consultation notice still active (quieted) — returns if new warning signs appear'}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={onOpenCrisisCard}
-                      className="px-3 py-1.5 rounded-xl bg-crisis-bg text-crisis-amber text-xs font-extrabold inline-flex items-center gap-1 hover:opacity-90 transition"
+                      onClick={() =>
+                        onUpdateSettings({ quietedConsultSignature: undefined })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-surface border border-warning-border text-xs font-semibold text-ink hover:opacity-90 transition"
                     >
-                      <ShieldAlert className="w-3.5 h-3.5" aria-hidden="true" />
-                      {hu ? '112 Kríziskártya' : '112 Crisis Card'}
+                      {hu ? 'Visszaállítás' : 'Expand'}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onSelectTab('safety')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition ${
-                      isEmergency
-                        ? 'bg-surface border border-emergency-border text-ink hover:opacity-90'
-                        : 'bg-surface border border-warning-border text-warning-ink hover:opacity-90'
-                    }`}
-                  >
-                    <span>{t.nav.safety}</span>
-                    <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTab('safety')}
+                      className="px-2.5 py-1 rounded-lg bg-surface border border-warning-border text-xs font-bold text-warning-ink inline-flex items-center gap-1 hover:opacity-90 transition"
+                    >
+                      <span>{t.nav.safety}</span>
+                      <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div
+                  role={isEmergency ? 'alert' : 'status'}
+                  className={`mb-3 @lg:mb-6 border-y @lg:border @lg:rounded-2xl px-4 py-3 space-y-2.5 ${
+                    isEmergency
+                      ? 'bg-emergency-soft border-emergency-border'
+                      : 'bg-warning-soft border-warning-border'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                      {isEmergency ? (
+                        <AlertOctagon
+                          className="w-4 h-4 text-emergency shrink-0 mt-0.5"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <AlertTriangle
+                          className="w-4 h-4 text-warning-ink shrink-0 mt-0.5"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <div className="min-w-0 space-y-0.5">
+                        <div
+                          className={`text-xs font-bold ${
+                            isEmergency ? 'text-emergency' : 'text-warning-ink'
+                          }`}
+                        >
+                          {isEmergency
+                            ? hu
+                              ? 'Azonnali sürgősségi jelzés — Hívd a 112-t!'
+                              : 'Immediate emergency alert — Call 112!'
+                            : hu
+                              ? 'Orvosi vagy gyógyszerészi konzultáció javasolt'
+                              : 'Doctor or pharmacist consultation recommended'}
+                        </div>
+                        {primaryReason && (
+                          <p className="text-xs text-ink leading-snug">
+                            {primaryReason}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {isEmergency && (
+                        <button
+                          type="button"
+                          onClick={onOpenCrisisCard}
+                          className="px-3 py-1.5 rounded-xl bg-crisis-bg text-crisis-amber text-xs font-extrabold inline-flex items-center gap-1 hover:opacity-90 transition"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" aria-hidden="true" />
+                          {hu ? '112 Kríziskártya' : '112 Crisis Card'}
+                        </button>
+                      )}
+                      {isConsult && !isEmergency && !confirmQuietOpen && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmQuietOpen(true)}
+                          className="px-3 py-1.5 rounded-xl bg-surface/80 border border-warning-border text-xs font-semibold text-ink hover:bg-surface inline-flex items-center gap-1 transition"
+                        >
+                          <BellOff className="w-3.5 h-3.5" aria-hidden="true" />
+                          {hu ? 'Halkítás…' : 'Quiet…'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onSelectTab('safety')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition ${
+                          isEmergency
+                            ? 'bg-surface border border-emergency-border text-ink hover:opacity-90'
+                            : 'bg-surface border border-warning-border text-warning-ink hover:opacity-90'
+                        }`}
+                      >
+                        <span>{t.nav.safety}</span>
+                        <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {isConsult && !isEmergency && confirmQuietOpen && (
+                    <div className="pt-2.5 border-t border-warning-border/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <p className="text-ink flex-1 min-w-[220px] leading-snug">
+                        {hu
+                          ? 'A háttérállapot (pl. aktív kiürülés vagy szerotonerg kockázat) ettől még fennáll. Új figyelmeztető tünet vagy gyógyszerváltozás esetén a figyelmeztetés automatikusan visszatér.'
+                          : 'The underlying clinical risk remains active. Quieting only shrinks this top banner; any new warning sign or medication change will automatically restore it.'}
+                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmQuietOpen(false)}
+                          className="px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                        >
+                          {hu ? 'Mégse' : 'Cancel'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onUpdateSettings({
+                              quietedConsultSignature: consultSignature,
+                            });
+                            setConfirmQuietOpen(false);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-warning text-warning-ink border border-warning-border text-xs font-bold hover:opacity-90"
+                        >
+                          {hu ? 'Értem, halkítás' : 'Confirm quiet'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
 
             {children}
 

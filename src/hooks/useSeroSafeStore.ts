@@ -65,6 +65,8 @@ function preserveUserSettings(
     theme: keepIncomingLangTheme ? incoming.theme : current.theme,
     reducedMotion: current.reducedMotion,
     hidePercentages: current.hidePercentages,
+    simplifiedMode: current.simplifiedMode,
+    quietedConsultSignature: undefined,
     desktopFrameMode: current.desktopFrameMode,
     allowEmergencyWithoutPin: current.allowEmergencyWithoutPin,
     pinEnabled: pinActive,
@@ -281,6 +283,23 @@ export function useSeroSafeStore() {
     const sym = state ? todayLog.symptomEntry : emergencySnapshot?.latestSymptom;
     return evaluateRiskAndSymptoms(meds, CURATED_SUBSTANCES, sym);
   }, [state, todayLog.symptomEntry, emergencySnapshot]);
+
+  // Once a consult condition resolves or escalates to 112, clear any prior consult hush
+  useEffect(() => {
+    if (
+      state?.settings.quietedConsultSignature &&
+      assessment.level !== 'CONSULT'
+    ) {
+      setState((prev) =>
+        prev && prev.settings.quietedConsultSignature
+          ? {
+              ...prev,
+              settings: { ...prev.settings, quietedConsultSignature: undefined },
+            }
+          : prev,
+      );
+    }
+  }, [assessment.level, state?.settings.quietedConsultSignature]);
 
   function updateStateWithPatterns(
     updater: (prev: SeroSafeState) => SeroSafeState,

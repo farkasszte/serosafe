@@ -5,8 +5,40 @@ import { getWillcoxFeelingLabel, WILLCOX_CORES } from '@/data/emotionWheel';
 interface EmotionWheelProps {
   lang: 'hu' | 'en';
   selectedIds: string[];
+  simplifiedMode?: boolean;
   onChange: (nextIds: string[], mappedEmotionIds: string[]) => void;
 }
+
+const SIMPLIFIED_QUADRANT_OPTIONS = [
+  {
+    id: 'w_peaceful',
+    hu: 'Nyugodt / rendben',
+    en: 'Calm / steady',
+    hintHu: 'Kiegyensúlyozott, békés',
+    hintEn: 'Steady, peaceful',
+  },
+  {
+    id: 'w_exhausted',
+    hu: 'Fáradt / lemerült',
+    en: 'Tired / drained',
+    hintHu: 'Alacsony energia, tompa',
+    hintEn: 'Low energy, numb',
+  },
+  {
+    id: 'w_anxious',
+    hu: 'Szorongó / feszült',
+    en: 'Anxious / tense',
+    hintHu: 'Bizonytalan, nyugtalan',
+    hintEn: 'Worried, uneasy',
+  },
+  {
+    id: 'w_overwhelmed',
+    hu: 'Túlterhelt / sok az inger',
+    en: 'Overwhelmed / overloaded',
+    hintHu: 'Túl sok benyomás, ingerlékeny',
+    hintEn: 'Sensory overload, reactive',
+  },
+] as const;
 
 const CX = 190;
 const CY = 190;
@@ -41,6 +73,7 @@ function wedgePath(
 export function EmotionWheel({
   lang,
   selectedIds,
+  simplifiedMode = false,
   onChange,
 }: EmotionWheelProps) {
   const hu = lang === 'hu';
@@ -74,6 +107,71 @@ export function EmotionWheel({
   }
 
   const sliceStep = 360 / WILLCOX_CORES.length;
+
+  if (simplifiedMode) {
+    return (
+      <div data-no-swipe="true" className="widget-container space-y-3">
+        <div
+          className="grid grid-cols-1 @[420px]:grid-cols-2 gap-2.5"
+          role="group"
+          aria-label={hu ? '4 fő érzelmi állapot' : '4 core emotional states'}
+        >
+          {SIMPLIFIED_QUADRANT_OPTIONS.map((opt) => {
+            const active = selectedIds.includes(opt.id);
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleFeeling(opt.id)}
+                className={`p-3.5 rounded-2xl border text-left transition space-y-1 ${
+                  active
+                    ? 'bg-accent text-ink-on-accent border-accent font-bold'
+                    : 'bg-surface-subtle/60 border-border text-ink hover:border-border-strong'
+                }`}
+              >
+                <div className="text-sm font-bold">
+                  {hu ? opt.hu : opt.en}
+                </div>
+                <div
+                  className={`text-xs ${
+                    active ? 'text-ink-on-accent/90' : 'text-ink-muted'
+                  }`}
+                >
+                  {hu ? opt.hintHu : opt.hintEn}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/70 text-xs">
+            <div className="flex flex-wrap gap-1.5">
+              {selectedIds.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggleFeeling(id)}
+                  className="px-2.5 py-1 rounded-full bg-accent-soft text-accent-strong text-xs font-semibold hover:opacity-85 transition"
+                >
+                  {getWillcoxFeelingLabel(id, lang)} ×
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => commitSelection([])}
+              className="text-xs font-semibold text-ink-muted hover:text-ink inline-flex items-center gap-1"
+            >
+              <Eraser className="w-3.5 h-3.5" aria-hidden="true" />
+              {hu ? 'Törlés' : 'Clear'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div data-no-swipe="true" className="widget-container">

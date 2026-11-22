@@ -136,6 +136,8 @@ export function App() {
         isLegalView={legalOpen}
         settings={state.settings}
         assessment={assessment}
+        todaySymptom={todayLog.symptomEntry}
+        todayBodySensations={todayLog.bodySensations}
         onSelectTab={handleSelectTab}
         onUpdateSettings={store.updateSettings}
         onOpenCrisisCard={() => setCrisisOpen(true)}
@@ -153,11 +155,17 @@ export function App() {
                 lang={lang}
                 activeDayPart={state.activeDayPart}
                 isDayPartAuto={store.isDayPartAuto}
+                simplifiedMode={Boolean(state.settings.simplifiedMode)}
                 todayLog={todayLog}
                 habits={state.habits}
                 doctorNote={state.doctorNote}
                 onSelectDayPart={store.selectDayPart}
                 onResetDayPartAuto={store.resetDayPartAuto}
+                onToggleSimplifiedMode={() =>
+                  store.updateSettings({
+                    simplifiedMode: !state.settings.simplifiedMode,
+                  })
+                }
                 onUpdateTodayLog={store.updateTodayLog}
                 onAddHabit={store.addHabit}
                 onDeleteHabit={store.deleteHabit}
@@ -207,6 +215,7 @@ export function App() {
                 medications={state.medications}
                 profile={state.communicationProfile}
                 baseAssessment={assessment}
+                simplifiedMode={Boolean(state.settings.simplifiedMode)}
                 onUpdateTodayLog={store.updateTodayLog}
                 onOpenCrisisCard={() => setCrisisOpen(true)}
                 onOpenClinicalReport={() => setReportOpen(true)}

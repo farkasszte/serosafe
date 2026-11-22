@@ -9,6 +9,10 @@ import {
   PAIN_QUALITIES,
 } from '@/data/substances';
 import {
+  buildConsultSignature,
+  isConsultQuietedForState,
+} from '@/engine/consultAlert';
+import {
   computeExplainablePatterns,
   evaluateRiskAndSymptoms,
   normalizeMedicationsForDate,
@@ -651,6 +655,107 @@ describe('Anatomical separation (Mouth vs Throat & CHOIR views)', () => {
     });
     expect(minimalBackup).not.toBeNull();
     expect(minimalBackup?.settings.lang).toBe('hu');
+    expect(minimalBackup?.settings.hidePercentages).toBe(true);
+    expect(minimalBackup?.settings.simplifiedMode).toBe(false);
     expect(minimalBackup?.communicationProfile.barrierStatementHu.length).toBeGreaterThan(10);
+  });
+
+  it('defaults hidePercentages to true and restores quieted consult banner on material symptom or medication changes', () => {
+    const demo = createDemoDataset('hu', 'light');
+    const clean = createCleanDataset('hu', 'light');
+    expect(demo.settings.hidePercentages).toBe(true);
+    expect(clean.settings.hidePercentages).toBe(true);
+    expect(demo.settings.simplifiedMode).toBe(false);
+
+    const fluoxetineWashout = makeMed({
+      id: 'm_fluo_w',
+      substanceId: 'fluoxetine',
+      customName: 'Fluoxetin',
+      isDiscontinued: true,
+      discontinuedAtIso: '2026-11-18T08:00:00Z',
+    });
+    const activeEscitalopram = makeMed({
+      id: 'm_esci',
+      substanceId: 'escitalopram',
+      customName: 'Escitalopram',
+    });
+
+    const day32Assessment = evaluateRiskAndSymptoms(
+      [fluoxetineWashout, activeEscitalopram],
+      CURATED_SUBSTANCES,
+      undefined,
+      undefined,
+      new Date('2026-11-21T12:00:00Z'),
+    );
+    expect(day32Assessment.level).toBe('CONSULT');
+
+    const sig = buildConsultSignature(day32Assessment, undefined, []);
+    expect(sig.length).toBeGreaterThan(0);
+
+    // 1. Natural washout countdown (day 32 -> day 25) stays quieted once confirmed
+    const day25Assessment = evaluateRiskAndSymptoms(
+      [fluoxetineWashout, activeEscitalopram],
+      CURATED_SUBSTANCES,
+      undefined,
+      undefined,
+      new Date('2026-11-28T12:00:00Z'),
+    );
+    expect(day25Assessment.level).toBe('CONSULT');
+    expect(
+      isConsultQuietedForState(
+        { quietedConsultSignature: sig },
+        day25Assessment,
+        undefined,
+        [],
+      ),
+    ).toBe(true);
+
+    // 2. Adding a new warning symptom (tremor or subfebrile fever or GI distress) automatically restores the banner
+    const tremorSymptom = makeSymptom({ hasTremor: true });
+    const tremorAssessment = evaluateRiskAndSymptoms(
+      [fluoxetineWashout, activeEscitalopram],
+      CURATED_SUBSTANCES,
+      tremorSymptom,
+      undefined,
+      new Date('2026-11-28T12:00:00Z'),
+    );
+    expect(
+      isConsultQuietedForState(
+        { quietedConsultSignature: sig },
+        tremorAssessment,
+        tremorSymptom,
+        [],
+      ),
+    ).toBe(false);
+
+    // 3. Logging a new somatic body sensation also invalidates the quieted signature
+    expect(
+      isConsultQuietedForState(
+        { quietedConsultSignature: sig },
+        day25Assessment,
+        undefined,
+        ['gi_nausea'],
+      ),
+    ).toBe(false);
+
+    // 4. Escalating to 112 emergency can NEVER be quieted
+    const emergencySymptom = makeSymptom({ hasInvoluntaryTwitching: true });
+    const emergencyAssessment = evaluateRiskAndSymptoms(
+      [fluoxetineWashout, activeEscitalopram],
+      CURATED_SUBSTANCES,
+      emergencySymptom,
+      undefined,
+      new Date('2026-11-28T12:00:00Z'),
+    );
+    expect(emergencyAssessment.level).toBe('CALL_EMERGENCY_112');
+    expect(buildConsultSignature(emergencyAssessment, emergencySymptom, [])).toBe('');
+    expect(
+      isConsultQuietedForState(
+        { quietedConsultSignature: sig },
+        emergencyAssessment,
+        emergencySymptom,
+        [],
+      ),
+    ).toBe(false);
   });
 });

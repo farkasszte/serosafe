@@ -34,11 +34,13 @@ interface TodayPageProps {
   lang: 'hu' | 'en';
   activeDayPart: DayPart;
   isDayPartAuto?: boolean;
+  simplifiedMode?: boolean;
   todayLog: DailyLogEntry;
   habits: HabitChip[];
   doctorNote: DoctorReferenceNote | null;
   onSelectDayPart: (part: DayPart) => void;
   onResetDayPartAuto?: () => void;
+  onToggleSimplifiedMode?: () => void;
   onUpdateTodayLog: (
     updater: (prev: DailyLogEntry) => DailyLogEntry,
     options?: { recomputePatterns?: boolean },
@@ -56,6 +58,19 @@ const DAY_PARTS: DayPart[] = [
   'night',
 ];
 
+const SIMPLIFIED_DAY_PARTS: DayPart[] = [
+  'morning',
+  'midday',
+  'evening',
+  'night',
+];
+
+function mapToSimplifiedDayPart(part: DayPart): DayPart {
+  if (part === 'forenoon') return 'morning';
+  if (part === 'afternoon') return 'midday';
+  return part;
+}
+
 function isLoadFactor(chip: HabitChip): boolean {
   return (
     chip.group === 'substances' ||
@@ -69,11 +84,13 @@ export function TodayPage({
   lang,
   activeDayPart,
   isDayPartAuto = true,
+  simplifiedMode = false,
   todayLog,
   habits,
   doctorNote,
   onSelectDayPart,
   onResetDayPartAuto,
+  onToggleSimplifiedMode,
   onUpdateTodayLog,
   onAddHabit,
   onDeleteHabit,
@@ -83,12 +100,37 @@ export function TodayPage({
 
   const [visualMode, setVisualMode] = useState<'wheel' | 'body' | 'dials'>('wheel');
   const [showAddHabit, setShowAddHabit] = useState(false);
+  const [showAllFactors, setShowAllFactors] = useState(false);
+  const [pendingDeleteHabitId, setPendingDeleteHabitId] = useState<string | null>(null);
   const [newHabitText, setNewHabitText] = useState('');
   const [newFactorKind, setNewFactorKind] = useState<'support' | 'load'>('support');
   const [showDocNote, setShowDocNote] = useState(false);
 
   const supportHabits = habits.filter((h) => !isLoadFactor(h));
   const loadHabits = habits.filter((h) => isLoadFactor(h));
+
+  function pickSimplifiedSlice(list: HabitChip[]): HabitChip[] {
+    if (!simplifiedMode || showAllFactors || list.length <= 4) return list;
+    const prioritized = [...list].sort((a, b) => {
+      const aSelected = todayLog.chipIds.includes(a.id) ? 1 : 0;
+      const bSelected = todayLog.chipIds.includes(b.id) ? 1 : 0;
+      if (aSelected !== bSelected) return bSelected - aSelected;
+      const aCustom = a.id.startsWith('c_custom_') ? 1 : 0;
+      const bCustom = b.id.startsWith('c_custom_') ? 1 : 0;
+      return bCustom - aCustom;
+    });
+    return prioritized.slice(0, 4);
+  }
+
+  const displayedSupportHabits = pickSimplifiedSlice(supportHabits);
+  const displayedLoadHabits = pickSimplifiedSlice(loadHabits);
+  const visibleDayParts = simplifiedMode ? SIMPLIFIED_DAY_PARTS : DAY_PARTS;
+  const highlightedDayPart = simplifiedMode
+    ? mapToSimplifiedDayPart(activeDayPart)
+    : activeDayPart;
+  const pendingDeleteHabit = pendingDeleteHabitId
+    ? habits.find((h) => h.id === pendingDeleteHabitId) ?? null
+    : null;
 
   function handleUpdateWillcox(
     willcoxIds: string[],
@@ -194,7 +236,7 @@ export function TodayPage({
           </button>
           <button
             type="button"
-            onClick={() => onDeleteHabit(chip.id)}
+            onClick={() => setPendingDeleteHabitId(chip.id)}
             aria-label={
               hu
                 ? `${chip.labelHu} törlése`
@@ -228,9 +270,34 @@ export function TodayPage({
       {/* Primary Visual Check-In Surface */}
       <section className="bg-surface border-y border-border px-4 py-4 @lg:border @lg:rounded-3xl @lg:p-6 space-y-4 @lg:space-y-5">
         <div className="space-y-2.5">
-          <h1 className="text-lg font-bold text-ink">
-            {hu ? 'Mai állapot' : 'Today'}
-          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-lg font-bold text-ink">
+              {hu ? 'Mai állapot' : 'Today'}
+            </h1>
+            {onToggleSimplifiedMode && (
+              <button
+                type="button"
+                aria-pressed={simplifiedMode}
+                onClick={() => {
+                  setShowAllFactors(false);
+                  onToggleSimplifiedMode();
+                }}
+                className={`px-3 py-1 rounded-full border text-xs font-semibold transition ${
+                  simplifiedMode
+                    ? 'bg-accent text-ink-on-accent border-accent'
+                    : 'bg-surface-subtle border-border text-ink-muted hover:text-ink'
+                }`}
+              >
+                {simplifiedMode
+                  ? hu
+                    ? 'Egyszerűsített mód (max. 4)'
+                    : 'Simplified mode (max 4)'
+                  : hu
+                    ? 'Egyszerűsített mód'
+                    : 'Simplified mode'}
+              </button>
+            )}
+          </div>
 
           {/* Auto-selected clock DayPart strip (user can tap any part to adjust) */}
           <div className="space-y-1.5">
@@ -239,11 +306,11 @@ export function TodayPage({
                 <Clock className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
                 {isDayPartAuto
                   ? hu
-                    ? 'Napszak (automatikus • felülírható)'
-                    : 'Part of day (auto-selected • tap to adjust)'
+                    ? `Napszak (automatikus: ${t.dayParts[activeDayPart]})`
+                    : `Part of day (auto: ${t.dayParts[activeDayPart]})`
                   : hu
-                    ? 'Napszak (kézzel módosítva)'
-                    : 'Part of day (manually selected)'}
+                    ? `Napszak (kézzel módosítva: ${t.dayParts[activeDayPart]})`
+                    : `Part of day (manual: ${t.dayParts[activeDayPart]})`}
               </span>
               {!isDayPartAuto && onResetDayPartAuto && (
                 <button
@@ -259,10 +326,14 @@ export function TodayPage({
             <div
               role="group"
               aria-label={hu ? 'Napszak' : 'Part of day'}
-              className="grid grid-cols-3 @[480px]:grid-cols-6 gap-1 p-1 rounded-2xl bg-surface-subtle"
+              className={`grid gap-1 p-1 rounded-2xl bg-surface-subtle ${
+                simplifiedMode
+                  ? 'grid-cols-4'
+                  : 'grid-cols-3 @[480px]:grid-cols-6'
+              }`}
             >
-              {DAY_PARTS.map((part) => {
-                const active = activeDayPart === part;
+              {visibleDayParts.map((part) => {
+                const active = highlightedDayPart === part;
                 return (
                   <button
                     key={part}
@@ -342,6 +413,7 @@ export function TodayPage({
             <EmotionWheel
               lang={lang}
               selectedIds={todayLog.emotionModelData?.willcox ?? []}
+              simplifiedMode={simplifiedMode}
               onChange={handleUpdateWillcox}
             />
           )}
@@ -355,6 +427,7 @@ export function TodayPage({
               painLevel={todayLog.painLevel ?? 0}
               painQualities={todayLog.painQualities ?? []}
               mode="diary"
+              simplifiedMode={simplifiedMode}
               onToggleSensation={toggleSensation}
               onChangeSelectedBodyParts={handleChangeSelectedBodyParts}
               onChangePainLevel={handleChangePainLevel}
@@ -439,7 +512,9 @@ export function TodayPage({
               {hu ? 'Támogató tényezők' : 'Supports & routine'}
             </h3>
             <div className="flex flex-wrap gap-2">
-              {supportHabits.map((chip) => renderFactorChip(chip, 'support'))}
+              {displayedSupportHabits.map((chip) =>
+                renderFactorChip(chip, 'support'),
+              )}
             </div>
           </div>
 
@@ -450,9 +525,61 @@ export function TodayPage({
                 : 'Load, triggers & caffeine'}
             </h3>
             <div className="flex flex-wrap gap-2">
-              {loadHabits.map((chip) => renderFactorChip(chip, 'load'))}
+              {displayedLoadHabits.map((chip) =>
+                renderFactorChip(chip, 'load'),
+              )}
             </div>
           </div>
+
+          {simplifiedMode && (supportHabits.length > 4 || loadHabits.length > 4) && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAllFactors((v) => !v)}
+                className="text-xs font-semibold text-secondary hover:underline"
+              >
+                {showAllFactors
+                  ? hu
+                    ? 'Vissza max. 4 opcióra'
+                    : 'Show max 4 per group'
+                  : hu
+                    ? `Összes tényező mutatása (${supportHabits.length + loadHabits.length})`
+                    : `Show all factors (${supportHabits.length + loadHabits.length})`}
+              </button>
+            </div>
+          )}
+
+          {pendingDeleteHabit && onDeleteHabit && (
+            <div
+              role="alert"
+              className="p-2.5 rounded-xl bg-emergency-soft border border-emergency-border flex flex-wrap items-center justify-between gap-2 text-xs"
+            >
+              <span className="font-semibold text-ink">
+                {hu
+                  ? `Törlöd az egyéni tényezőt: „${pendingDeleteHabit.labelHu}”?`
+                  : `Delete custom factor "${pendingDeleteHabit.labelEn}"?`}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteHabitId(null)}
+                  className="px-2.5 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                >
+                  {hu ? 'Mégse' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeleteHabit(pendingDeleteHabit.id);
+                    setPendingDeleteHabitId(null);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emergency text-emergency-ink text-xs font-bold"
+                >
+                  {hu ? 'Törlés' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {showAddHabit && (

@@ -257,6 +257,8 @@ export interface AppSettings {
   theme: 'light' | 'dark';
   reducedMotion: boolean;
   hidePercentages: boolean;
+  simplifiedMode?: boolean;
+  quietedConsultSignature?: string;
   desktopFrameMode: 'responsive' | 'mobile-preview';
   pinEnabled: boolean;
   allowEmergencyWithoutPin: boolean;

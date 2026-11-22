@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   Check,
   Clock,
@@ -41,6 +42,36 @@ export function MedsPage({
 }: MedsPageProps) {
   const t = STRINGS[lang].meds;
   const hu = lang === 'hu';
+  const [pendingDeleteMedId, setPendingDeleteMedId] = useState<string | null>(
+    null,
+  );
+
+  // Close any open overflow <details data-med-menu> when clicking outside or pressing Escape
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      document
+        .querySelectorAll<HTMLDetailsElement>('details[data-med-menu][open]')
+        .forEach((el) => {
+          if (!target || !el.contains(target)) {
+            el.removeAttribute('open');
+          }
+        });
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        document
+          .querySelectorAll<HTMLDetailsElement>('details[data-med-menu][open]')
+          .forEach((el) => el.removeAttribute('open'));
+      }
+    }
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const activeMeds = medications.filter((m) => !m.isDiscontinued);
   const discontinuedMeds = medications.filter((m) => m.isDiscontinued);
@@ -122,10 +153,10 @@ export function MedsPage({
                     </div>
 
                     {/* Overflow secondary actions tucked cleanly */}
-                    <details className="relative">
+                    <details data-med-menu="true" className="relative">
                       <summary
                         aria-label={hu ? 'További műveletek' : 'More actions'}
-                        className="list-none cursor-pointer p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-subtle"
+                        className="list-none cursor-pointer p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-subtle"
                       >
                         <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
                       </summary>
@@ -148,7 +179,7 @@ export function MedsPage({
                             e.currentTarget
                               .closest('details')
                               ?.removeAttribute('open');
-                            onDeleteMedication(med.id);
+                            setPendingDeleteMedId(med.id);
                           }}
                           className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-emergency hover:bg-emergency-soft inline-flex items-center gap-1.5"
                         >
@@ -158,6 +189,38 @@ export function MedsPage({
                       </div>
                     </details>
                   </div>
+
+                  {pendingDeleteMedId === med.id && (
+                    <div
+                      role="alert"
+                      className="p-2.5 rounded-xl bg-emergency-soft border border-emergency-border flex flex-wrap items-center justify-between gap-2 text-xs"
+                    >
+                      <span className="font-semibold text-ink">
+                        {hu
+                          ? `Eltávolítod a(z) ${med.customName} készítményt a listáról?`
+                          : `Remove ${med.customName} from your medication list?`}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteMedId(null)}
+                          className="px-2.5 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                        >
+                          {hu ? 'Mégse' : 'Cancel'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteMedication(med.id);
+                            setPendingDeleteMedId(null);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emergency text-emergency-ink text-xs font-bold"
+                        >
+                          {hu ? 'Eltávolítás' : 'Remove'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Guilt-free 3-state buttons */}
                   <div className="grid grid-cols-3 gap-2 max-w-md">
@@ -260,13 +323,44 @@ export function MedsPage({
                       </button>
                       <button
                         type="button"
-                        onClick={() => onDeleteMedication(med.id)}
+                        onClick={() => setPendingDeleteMedId(med.id)}
                         className="text-ink-muted hover:text-emergency font-semibold inline-flex items-center gap-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                         {hu ? 'Eltávolítás' : 'Remove'}
                       </button>
                     </div>
+                    {pendingDeleteMedId === med.id && (
+                      <div
+                        role="alert"
+                        className="p-2.5 rounded-xl bg-emergency-soft border border-emergency-border flex flex-wrap items-center justify-between gap-2 text-xs"
+                      >
+                        <span className="font-semibold text-ink">
+                          {hu
+                            ? `Törlöd a kiürülés alatt lévő ${med.customName} bejegyzést?`
+                            : `Remove ${med.customName} washout record?`}
+                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteMedId(null)}
+                            className="px-2.5 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                          >
+                            {hu ? 'Mégse' : 'Cancel'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onDeleteMedication(med.id);
+                              setPendingDeleteMedId(null);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emergency text-emergency-ink text-xs font-bold"
+                          >
+                            {hu ? 'Eltávolítás' : 'Remove'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -274,30 +368,63 @@ export function MedsPage({
               return (
                 <div
                   key={med.id}
-                  className="p-3.5 rounded-2xl bg-surface border border-border flex items-center justify-between gap-3 text-xs"
+                  className="p-3.5 rounded-2xl bg-surface border border-border space-y-2 text-xs"
                 >
-                  <div>
-                    <div className="font-bold text-ink">
-                      {med.customName} ({med.doseText})
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-ink">
+                        {med.customName} ({med.doseText})
+                      </div>
+                      <div className="text-ink-muted">
+                        {hu
+                          ? 'Leállítva — kiürülési ablak letelt.'
+                          : 'Discontinued — washout window complete.'}
+                      </div>
                     </div>
-                    <div className="text-ink-muted">
-                      {hu
-                        ? 'Leállítva — kiürülési ablak letelt.'
-                        : 'Discontinued — washout window complete.'}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDeleteMedId(med.id)}
+                      aria-label={
+                        hu
+                          ? `${med.customName} eltávolítása`
+                          : `Remove ${med.customName}`
+                      }
+                      className="p-2 rounded-xl text-ink-muted hover:text-emergency"
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteMedication(med.id)}
-                    aria-label={
-                      hu
-                        ? `${med.customName} eltávolítása`
-                        : `Remove ${med.customName}`
-                    }
-                    className="p-2 rounded-xl text-ink-muted hover:text-emergency"
-                  >
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
-                  </button>
+                  {pendingDeleteMedId === med.id && (
+                    <div
+                      role="alert"
+                      className="p-2 rounded-xl bg-emergency-soft border border-emergency-border flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <span className="font-semibold text-ink">
+                        {hu
+                          ? `Eltávolítod a leállított ${med.customName} szert?`
+                          : `Remove discontinued ${med.customName}?`}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteMedId(null)}
+                          className="px-2.5 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                        >
+                          {hu ? 'Mégse' : 'Cancel'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteMedication(med.id);
+                            setPendingDeleteMedId(null);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emergency text-emergency-ink text-xs font-bold"
+                        >
+                          {hu ? 'Eltávolítás' : 'Remove'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

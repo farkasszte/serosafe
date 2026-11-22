@@ -48,12 +48,19 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const hu = settings.lang === 'hu';
 
+  const [activeSection, setActiveSection] = useState<
+    'display' | 'profile' | 'security' | 'demo'
+  >('display');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
   const [pinMsg, setPinMsg] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [confirmResetProfile, setConfirmResetProfile] = useState(false);
+  const [pendingScenario, setPendingScenario] = useState<
+    'demo' | 'crisis' | 'clean' | null
+  >(null);
   const [newInstruction, setNewInstruction] = useState('');
   const [newSensitivity, setNewSensitivity] = useState('');
 
@@ -64,6 +71,8 @@ export function SettingsDialog({
       setPinMsg(null);
       setPinError(null);
       setProfileMsg(null);
+      setConfirmResetProfile(false);
+      setPendingScenario(null);
     }
   }, [open]);
 
@@ -163,145 +172,308 @@ export function SettingsDialog({
           </button>
         </div>
 
+        {/* 4 Clean Topic Tabs inside SettingsDialog */}
+        <div
+          role="tablist"
+          aria-label={hu ? 'Beállítási kategóriák' : 'Settings categories'}
+          className="grid grid-cols-2 @[460px]:grid-cols-4 gap-1 p-1 rounded-2xl bg-surface-subtle"
+        >
+          {(
+            [
+              { id: 'display', hu: 'Megjelenés', en: 'Display' },
+              { id: 'profile', hu: 'Kríziskártya', en: 'Crisis card' },
+              { id: 'security', hu: 'PIN-zár', en: 'PIN lock' },
+              { id: 'demo', hu: 'Tesztmód', en: 'Demo mode' },
+            ] as const
+          ).map((tab) => {
+            const active = activeSection === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => {
+                  setActiveSection(tab.id);
+                  setConfirmResetProfile(false);
+                  setPendingScenario(null);
+                }}
+                className={`py-1.5 px-2 rounded-xl text-xs text-center transition ${
+                  active
+                    ? 'bg-surface text-ink font-bold shadow-xs'
+                    : 'text-ink-muted font-medium hover:text-ink'
+                }`}
+              >
+                {hu ? tab.hu : tab.en}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Display & Sensory Preferences */}
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-ink">
-            {hu ? 'Megjelenés és szenzoros kényelem' : 'Display & sensory comfort'}
-          </h3>
+        {activeSection === 'display' && (
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold text-ink">
+              {hu ? 'Megjelenés és szenzoros kényelem' : 'Display & sensory comfort'}
+            </h3>
 
-          <div className="grid grid-cols-1 @[480px]:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 @[480px]:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateSettings({
+                    theme: settings.theme === 'light' ? 'dark' : 'light',
+                  })
+                }
+                className="p-3 rounded-xl bg-surface-subtle border border-border flex items-center justify-between text-xs font-semibold text-ink"
+              >
+                <span>{hu ? 'Téma' : 'Theme'}</span>
+                <span className="inline-flex items-center gap-1.5 text-accent">
+                  {settings.theme === 'light' ? (
+                    <>
+                      <Sun className="w-4 h-4" aria-hidden="true" />
+                      {hu ? 'Világos zsálya' : 'Calm light'}
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-4 h-4" aria-hidden="true" />
+                      {hu ? 'Nyugodt sötét' : 'Calm dark'}
+                    </>
+                  )}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateSettings({
+                    lang: settings.lang === 'hu' ? 'en' : 'hu',
+                  })
+                }
+                className="p-3 rounded-xl bg-surface-subtle border border-border flex items-center justify-between text-xs font-semibold text-ink"
+              >
+                <span>{hu ? 'Nyelv' : 'Language'}</span>
+                <span className="text-accent font-bold">
+                  {settings.lang === 'hu' ? 'Magyar' : 'English'}
+                </span>
+              </button>
+            </div>
+
+            <label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-subtle border border-border cursor-pointer text-xs font-semibold text-ink">
+              <div>
+                <div>
+                  {hu
+                    ? 'Egyszerűsített mód (legfeljebb 4 opció)'
+                    : 'Simplified mode (max 4 options per choice)'}
+                </div>
+                <div className="font-normal text-ink-muted">
+                  {hu
+                    ? 'Alacsonyabb kognitív terhelés fáradtság vagy szenzoros túlterhelés idején'
+                    : 'Reduces simultaneous options during fatigue or sensory overload'}
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={Boolean(settings.simplifiedMode)}
+                onChange={(e) =>
+                  onUpdateSettings({ simplifiedMode: e.target.checked })
+                }
+                className="w-4 h-4 rounded shrink-0"
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-subtle border border-border cursor-pointer text-xs font-semibold text-ink">
+              <span>
+                {hu
+                  ? 'Százalékok elrejtése a Naptár nézetben'
+                  : 'Hide percentages in Calendar view'}
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.hidePercentages}
+                onChange={(e) =>
+                  onUpdateSettings({ hidePercentages: e.target.checked })
+                }
+                className="w-4 h-4 rounded shrink-0"
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-subtle border border-border cursor-pointer text-xs font-semibold text-ink">
+              <span>
+                {hu
+                  ? 'Animációk csökkentése'
+                  : 'Reduced motion (disable transitions)'}
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.reducedMotion}
+                onChange={(e) =>
+                  onUpdateSettings({ reducedMotion: e.target.checked })
+                }
+                className="w-4 h-4 rounded shrink-0"
+              />
+            </label>
+
             <button
               type="button"
-              onClick={() =>
-                onUpdateSettings({
-                  theme: settings.theme === 'light' ? 'dark' : 'light',
-                })
-              }
-              className="p-3 rounded-xl bg-surface-subtle border border-border flex items-center justify-between text-xs font-semibold text-ink"
+              onClick={() => {
+                onClose();
+                onOpenLegal();
+              }}
+              className="w-full py-2.5 px-3.5 rounded-xl bg-surface-subtle border border-border hover:border-border-strong text-xs font-semibold text-ink inline-flex items-center justify-center gap-2 transition"
             >
-              <span>{hu ? 'Téma' : 'Theme'}</span>
-              <span className="inline-flex items-center gap-1.5 text-accent">
-                {settings.theme === 'light' ? (
-                  <>
-                    <Sun className="w-4 h-4" aria-hidden="true" />
-                    {hu ? 'Világos zsálya' : 'Calm light'}
-                  </>
-                ) : (
-                  <>
-                    <Moon className="w-4 h-4" aria-hidden="true" />
-                    {hu ? 'Nyugodt sötét' : 'Calm dark'}
-                  </>
-                )}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                onUpdateSettings({
-                  lang: settings.lang === 'hu' ? 'en' : 'hu',
-                })
-              }
-              className="p-3 rounded-xl bg-surface-subtle border border-border flex items-center justify-between text-xs font-semibold text-ink"
-            >
-              <span>{hu ? 'Nyelv' : 'Language'}</span>
-              <span className="text-accent font-bold">
-                {settings.lang === 'hu' ? 'Magyar' : 'English'}
-              </span>
-            </button>
-          </div>
-
-          <label className="flex items-center justify-between p-3 rounded-xl bg-surface-subtle border border-border cursor-pointer text-xs font-semibold text-ink">
-            <span>
+              <FileText className="w-4 h-4 text-secondary" aria-hidden="true" />
               {hu
-                ? 'Animációk csökkentése'
-                : 'Reduced motion (disable transitions)'}
-            </span>
-            <input
-              type="checkbox"
-              checked={settings.reducedMotion}
-              onChange={(e) =>
-                onUpdateSettings({ reducedMotion: e.target.checked })
-              }
-              className="w-4 h-4 rounded"
-            />
-          </label>
-        </section>
+                ? 'Felhasználási feltételek, adatvédelem és források'
+                : 'Terms of Use, Privacy & Sources'}
+            </button>
+          </section>
+        )}
 
-        {/* OTIO / Jury / Paramedic A/B Testing Controller */}
-        <section className="p-3 @[480px]:p-3.5 rounded-xl @[480px]:rounded-2xl bg-surface-blue border border-secondary-border space-y-2.5">
-          <h3 className="text-sm font-bold text-ink">
-            {hu
-              ? 'Bemutató és tesztelési forgatókönyvek'
-              : 'Testing & Demo Scenarios (OTIO / A-B simulation)'}
-          </h3>
-          <p className="text-xs text-ink-muted">
-            {hu
-              ? 'Válts egy kattintással a mintaadatok, a sürgősségi 112-es szimuláció és a tiszta üres profil között.'
-              : 'Switch in one tap between realistic history, acute 112 crisis simulation, or a clean empty profile.'}
-          </p>
-          <div className="grid grid-cols-1 @[520px]:grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                onLoadDemoScenario();
-                onClose();
-              }}
-              className="py-2.5 px-3 rounded-xl bg-surface border border-border hover:border-border-strong text-xs font-bold text-ink inline-flex items-center justify-center gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-              {hu ? 'Mintaadatok' : 'Demo dataset'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onLoadCrisisSimulation();
-                onClose();
-              }}
-              className="py-2.5 px-3 rounded-xl bg-warning-soft border border-warning-border text-xs font-bold text-warning-ink inline-flex items-center justify-center gap-1.5"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-              {hu ? 'Krízisszimuláció' : 'Crisis simulation'}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onLoadCleanProfile();
-                onClose();
-              }}
-              className="py-2.5 px-3 rounded-xl bg-surface border border-border hover:border-border-strong text-xs font-semibold text-ink-muted hover:text-ink"
-            >
-              {hu ? 'Tiszta üres profil' : 'Clean empty profile'}
-            </button>
-          </div>
-        </section>
-
-        {/* Editable Communication Profile */}
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* OTIO / Jury / Paramedic A/B Testing Controller (Protected with explicit confirmation) */}
+        {activeSection === 'demo' && (
+          <section className="p-3 @[480px]:p-4 rounded-xl @[480px]:rounded-2xl bg-surface-blue border border-secondary-border space-y-3">
             <h3 className="text-sm font-bold text-ink">
               {hu
-                ? 'Sürgősségi kommunikációs profil (Kríziskártyára kerül)'
-                : 'Emergency communication profile (shown on Crisis Card)'}
+                ? 'Bemutató és tesztmód (OTIO / védett felülírás)'
+                : 'Testing & Demo Mode (Confirmation Required)'}
             </h3>
-            <button
-              type="button"
-              onClick={() => {
-                onResetProfile();
-                setNewInstruction('');
-                setNewSensitivity('');
-                setProfileMsg(
-                  hu
-                    ? 'Kommunikációs profil visszaállítva az alapértelmezett szövegekre.'
-                    : 'Communication profile restored to default wording.',
-                );
-              }}
-              className="px-2.5 py-1 rounded-xl bg-surface-subtle border border-border hover:border-border-strong text-xs font-semibold text-ink-muted hover:text-ink inline-flex items-center gap-1"
-            >
-              <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-              {hu ? 'Alapértelmezett visszaállítása' : 'Reset defaults'}
-            </button>
-          </div>
+            <p className="text-xs text-ink-muted">
+              {hu
+                ? 'A mintaadatok és az üres profil lecserélhetik a jelenlegi helyi naplódat, ezért minden profilváltás előtt megerősítést kérünk.'
+                : 'Loading demo scenarios or a clean profile alters or replaces your current local logs. Confirmation is required before applying.'}
+            </p>
+            <div className="grid grid-cols-1 @[520px]:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingScenario('demo')}
+                className={`py-2.5 px-3 rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1.5 ${
+                  pendingScenario === 'demo'
+                    ? 'bg-accent text-ink-on-accent border-accent'
+                    : 'bg-surface border-border hover:border-border-strong text-ink'
+                }`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                {hu ? 'Mintaadatok' : 'Demo dataset'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingScenario('crisis')}
+                className={`py-2.5 px-3 rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1.5 ${
+                  pendingScenario === 'crisis'
+                    ? 'bg-warning text-warning-ink border-warning-border'
+                    : 'bg-warning-soft border-warning-border text-warning-ink'
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                {hu ? 'Krízisszimuláció' : 'Crisis simulation'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingScenario('clean')}
+                className={`py-2.5 px-3 rounded-xl border text-xs font-semibold ${
+                  pendingScenario === 'clean'
+                    ? 'bg-emergency text-emergency-ink border-emergency'
+                    : 'bg-surface border-border hover:border-border-strong text-ink-muted hover:text-ink'
+                }`}
+              >
+                {hu ? 'Tiszta üres profil' : 'Clean empty profile'}
+              </button>
+            </div>
+
+            {pendingScenario && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-surface border border-warning-border space-y-2 text-xs"
+              >
+                <p className="font-semibold text-ink">
+                  {pendingScenario === 'demo'
+                    ? hu
+                      ? 'Megerősíted a Mintaadatok betöltését? Ez felülírja a jelenlegi helyi naplódat és gyógyszereidet.'
+                      : 'Confirm loading Demo dataset? This replaces your current local logs and medications.'
+                    : pendingScenario === 'crisis'
+                      ? hu
+                        ? 'Megerősíted a Krízisszimulációt? Ez DXM köhögéscsillapítót és akut riasztási tüneteket ad a mai naphoz.'
+                        : 'Confirm Crisis simulation? This adds OTC DXM and acute warning symptoms to today.'
+                      : hu
+                        ? 'Megerősíted a Tiszta üres profil betöltését? Minden korábbi minta és rögzített bejegyzés törlődik.'
+                        : 'Confirm Clean empty profile? All current logs and medications will be cleared.'}
+                </p>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingScenario(null)}
+                    className="px-3 py-1.5 rounded-xl bg-surface-subtle border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                  >
+                    {hu ? 'Mégse' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pendingScenario === 'demo') onLoadDemoScenario();
+                      else if (pendingScenario === 'crisis')
+                        onLoadCrisisSimulation();
+                      else onLoadCleanProfile();
+                      setPendingScenario(null);
+                      onClose();
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-accent text-ink-on-accent text-xs font-bold"
+                  >
+                    {hu ? 'Megerősítem, betöltés' : 'Confirm & load'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Editable Communication Profile */}
+        {activeSection === 'profile' && (
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-ink">
+                {hu
+                  ? 'Sürgősségi kommunikációs profil (Kríziskártyára kerül)'
+                  : 'Emergency communication profile (shown on Crisis Card)'}
+              </h3>
+              {confirmResetProfile ? (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResetProfile(false)}
+                    className="px-2.5 py-1 rounded-xl bg-surface-subtle border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                  >
+                    {hu ? 'Mégse' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onResetProfile();
+                      setNewInstruction('');
+                      setNewSensitivity('');
+                      setConfirmResetProfile(false);
+                      setProfileMsg(
+                        hu
+                          ? 'Kommunikációs profil visszaállítva az alapértelmezett szövegekre.'
+                          : 'Communication profile restored to default wording.',
+                      );
+                    }}
+                    className="px-2.5 py-1 rounded-xl bg-emergency text-emergency-ink text-xs font-bold"
+                  >
+                    {hu ? 'Visszaállítás' : 'Confirm reset'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmResetProfile(true)}
+                  className="px-2.5 py-1 rounded-xl bg-surface-subtle border border-border hover:border-border-strong text-xs font-semibold text-ink-muted hover:text-ink inline-flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                  {hu ? 'Alapértelmezett visszaállítása' : 'Reset defaults'}
+                </button>
+              )}
+            </div>
 
           {profileMsg && (
             <p className="text-xs font-semibold text-accent">{profileMsg}</p>
@@ -570,9 +742,11 @@ export function SettingsDialog({
             </div>
           </div>
         </section>
+        )}
 
         {/* WebCrypto AES-GCM PIN Protection */}
-        <section className="pt-3.5 border-t border-border @[480px]:p-3.5 @[480px]:rounded-2xl @[480px]:bg-surface-subtle @[480px]:border space-y-3">
+        {activeSection === 'security' && (
+        <section className="p-3.5 rounded-2xl bg-surface-subtle border border-border space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-ink inline-flex items-center gap-1.5">
               <Shield className="w-4 h-4 text-accent" aria-hidden="true" />
@@ -677,21 +851,7 @@ export function SettingsDialog({
           )}
           {pinMsg && <p className="text-xs font-semibold text-accent">{pinMsg}</p>}
         </section>
-
-        {/* Terms, Privacy & Scientific Sources */}
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            onOpenLegal();
-          }}
-          className="w-full py-2.5 px-3.5 rounded-xl bg-surface-subtle border border-border hover:border-border-strong text-xs font-semibold text-ink inline-flex items-center justify-center gap-2 transition"
-        >
-          <FileText className="w-4 h-4 text-secondary" aria-hidden="true" />
-          {hu
-            ? 'Felhasználási feltételek, adatvédelem és források'
-            : 'Terms of Use, Privacy & Sources'}
-        </button>
+        )}
       </div>
     </ModalDialog>
   );

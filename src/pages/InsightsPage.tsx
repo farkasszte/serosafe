@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, GitCommitHorizontal } from 'lucide-react';
+import { CalendarDays, ChevronDown, GitCommitHorizontal, RotateCcw } from 'lucide-react';
 import {
   METRIC_CONFIGS,
   ProgressChart,
@@ -27,10 +27,15 @@ export function InsightsPage({
   const [activeMetrics, setActiveMetrics] = useState<string[]>([
     'energy',
     'mood',
-    'doses',
   ]);
   const [strongOnly, setStrongOnly] = useState(false);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [showHiddenPatterns, setShowHiddenPatterns] = useState(false);
+  const [lastDismissed, setLastDismissed] = useState<{
+    id: string;
+    title: string;
+    prevStatus: PatternInsight['status'];
+  } | null>(null);
 
   function toggleMetric(id: string) {
     setActiveMetrics((prev) => {
@@ -64,6 +69,19 @@ export function InsightsPage({
     );
   }, [patterns, strongOnly]);
 
+  const dismissedPatterns = useMemo(() => {
+    return patterns.filter((p) => p.status === 'hidden' || p.status === 'wrong');
+  }, [patterns]);
+
+  function dismissPattern(p: PatternInsight, nextStatus: 'hidden' | 'wrong') {
+    setLastDismissed({
+      id: p.id,
+      title: hu ? p.titleHu : p.titleEn,
+      prevStatus: p.status,
+    });
+    onSetPatternStatus(p.id, nextStatus);
+  }
+
   return (
     <div className="space-y-3 @lg:space-y-6">
       {/* Progress Graph */}
@@ -85,7 +103,7 @@ export function InsightsPage({
                     : 'text-ink-muted hover:text-ink'
                 }`}
               >
-                {r === 14 ? t.range14 : r === 30 ? t.range30 : t.range90}
+                {r === 14 ? t.range14 : r === 30 ? t.range30 : t.range45}
               </button>
             ))}
           </div>
@@ -144,6 +162,29 @@ export function InsightsPage({
           </button>
         </div>
 
+        {lastDismissed && (
+          <div
+            role="status"
+            className="px-4 @lg:px-6 py-2.5 bg-surface-subtle border-b border-border flex flex-wrap items-center justify-between gap-2 text-xs"
+          >
+            <span className="text-ink-muted">
+              {hu ? 'Elrejtve: ' : 'Hidden: '}
+              <strong className="text-ink">{lastDismissed.title}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onSetPatternStatus(lastDismissed.id, lastDismissed.prevStatus);
+                setLastDismissed(null);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-surface border border-border text-xs font-bold text-accent hover:opacity-90 inline-flex items-center gap-1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+              {hu ? 'Visszavonás' : 'Undo'}
+            </button>
+          </div>
+        )}
+
         {visiblePatterns.length === 0 ? (
           <p className="p-5 text-xs text-ink-muted">{t.emptyPatterns}</p>
         ) : (
@@ -179,7 +220,13 @@ export function InsightsPage({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onSetPatternStatus(p.id, 'kept')}
+                      onClick={() =>
+                        onSetPatternStatus(
+                          p.id,
+                          p.status === 'kept' ? 'shown' : 'kept',
+                        )
+                      }
+                      aria-pressed={p.status === 'kept'}
                       className={
                         p.status === 'kept'
                           ? 'text-accent font-bold'
@@ -190,14 +237,14 @@ export function InsightsPage({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onSetPatternStatus(p.id, 'hidden')}
+                      onClick={() => dismissPattern(p, 'hidden')}
                       className="text-ink-muted hover:text-ink"
                     >
                       {t.hide}
                     </button>
                     <button
                       type="button"
-                      onClick={() => onSetPatternStatus(p.id, 'wrong')}
+                      onClick={() => dismissPattern(p, 'wrong')}
                       className="text-ink-muted hover:text-emergency"
                     >
                       {t.wrong}
@@ -215,6 +262,65 @@ export function InsightsPage({
                 </article>
               );
             })}
+          </div>
+        )}
+
+        {dismissedPatterns.length > 0 && (
+          <div className="border-t border-border bg-surface-subtle/50 px-4 @lg:px-6 py-3 space-y-2">
+            <button
+              type="button"
+              aria-expanded={showHiddenPatterns}
+              onClick={() => setShowHiddenPatterns((v) => !v)}
+              className="w-full flex items-center justify-between text-xs font-semibold text-ink-muted hover:text-ink"
+            >
+              <span>
+                {hu
+                  ? `Elrejtett / elutasított minták visszaállítása (${dismissedPatterns.length})`
+                  : `Restore hidden / dismissed patterns (${dismissedPatterns.length})`}
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 transition ${
+                  showHiddenPatterns ? 'rotate-180' : ''
+                }`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {showHiddenPatterns && (
+              <div className="divide-y divide-border rounded-xl border border-border bg-surface overflow-hidden">
+                {dismissedPatterns.map((p) => (
+                  <div
+                    key={p.id}
+                    className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-semibold text-ink">
+                        {hu ? p.titleHu : p.titleEn}
+                      </span>
+                      <span className="ml-2 text-ink-muted">
+                        (
+                        {p.status === 'wrong'
+                          ? hu
+                            ? 'tévesként jelölve'
+                            : 'marked wrong'
+                          : hu
+                            ? 'elrejtve'
+                            : 'hidden'}
+                        )
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSetPatternStatus(p.id, 'shown')}
+                      className="px-2.5 py-1 rounded-lg bg-surface-subtle border border-border text-xs font-bold text-accent hover:opacity-90 inline-flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                      {hu ? 'Visszaállítás' : 'Restore'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>

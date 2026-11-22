@@ -45,6 +45,7 @@ interface SafetyPageProps {
   medications: UserMedication[];
   profile: CommunicationProfile;
   baseAssessment: StructuredAssessment;
+  simplifiedMode?: boolean;
   onUpdateTodayLog: (
     updater: (prev: DailyLogEntry) => DailyLogEntry,
     options?: { recomputePatterns?: boolean },
@@ -72,6 +73,7 @@ export function SafetyPage({
   medications,
   profile,
   baseAssessment,
+  simplifiedMode = false,
   onUpdateTodayLog,
   onOpenCrisisCard,
   onOpenClinicalReport,
@@ -675,6 +677,7 @@ export function SafetyPage({
           painLevel={todayLog.painLevel ?? 0}
           painQualities={todayLog.painQualities ?? []}
           mode="safety"
+          simplifiedMode={simplifiedMode}
           onToggleSensation={toggleSafetySensation}
           onChangeSelectedBodyParts={handleChangeSafetyBodyParts}
           onChangePainLevel={handleChangeSafetyPainLevel}
@@ -741,19 +744,7 @@ export function SafetyPage({
               {t.exportCsv}
             </button>
 
-            {confirmReset ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onResetAllData();
-                  setConfirmReset(false);
-                }}
-                className="py-2.5 px-3 rounded-xl bg-emergency text-emergency-ink text-xs font-bold inline-flex items-center justify-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" aria-hidden="true" />
-                {hu ? 'Törlés' : 'Confirm'}
-              </button>
-            ) : (
+            {!confirmReset && (
               <button
                 type="button"
                 onClick={() => setConfirmReset(true)}
@@ -764,6 +755,39 @@ export function SafetyPage({
               </button>
             )}
           </div>
+
+          {confirmReset && (
+            <div
+              role="alert"
+              className="p-3 rounded-2xl bg-emergency-soft border border-emergency-border flex flex-wrap items-center justify-between gap-2 text-xs"
+            >
+              <span className="font-semibold text-ink">
+                {hu
+                  ? 'Biztosan törlöd az összes helyi naplót, gyógyszert és beállítást? Ez nem vonható vissza.'
+                  : 'Erase all local logs, medications, and settings? This cannot be undone.'}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setConfirmReset(false)}
+                  className="py-1.5 px-3 rounded-xl bg-surface border border-border text-xs font-semibold text-ink-muted hover:text-ink"
+                >
+                  {hu ? 'Mégse' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onResetAllData();
+                    setConfirmReset(false);
+                  }}
+                  className="py-1.5 px-3 rounded-xl bg-emergency text-emergency-ink text-xs font-bold inline-flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  {hu ? 'Végleges törlés' : 'Confirm erase'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {backupStatusMessage && (
             <p

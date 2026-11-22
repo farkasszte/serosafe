@@ -25,6 +25,7 @@ interface BodyMapProps {
   painLevel?: number | null;
   painQualities?: PainQualityId[];
   mode?: 'diary' | 'safety';
+  simplifiedMode?: boolean;
   onToggleSensation: (sensationId: string, region: BodyRegionId) => void;
   onChangeSelectedBodyParts?: (
     partIds: string[],
@@ -33,6 +34,34 @@ interface BodyMapProps {
   onChangePainLevel?: (level: number) => void;
   onTogglePainQuality?: (quality: PainQualityId) => void;
 }
+
+const SIMPLIFIED_ZONE_PRESETS = [
+  {
+    key: 'head_throat',
+    hu: 'Fej, száj, torok',
+    en: 'Head, mouth, throat',
+    partIds: ['f_head_upper', 'f_face_mouth', 'f_neck_throat'],
+  },
+  {
+    key: 'chest',
+    hu: 'Mellkas és szív',
+    en: 'Chest & heart',
+    partIds: ['f_chest_l', 'f_chest_r'],
+  },
+  {
+    key: 'stomach',
+    hu: 'Has és gyomor',
+    en: 'Stomach & abdomen',
+    partIds: ['f_abdomen_upper', 'f_abdomen_lower'],
+  },
+] as const;
+
+const SIMPLIFIED_PAIN_PRESETS = [
+  { level: 0, hu: 'Nincs (0)', en: 'None (0)' },
+  { level: 3, hu: 'Enyhe (3)', en: 'Mild (3)' },
+  { level: 5, hu: 'Mérsékelt (5)', en: 'Moderate (5)' },
+  { level: 8, hu: 'Erős (8)', en: 'Severe (8)' },
+] as const;
 
 const REGION_TITLES: Record<BodyRegionId, { hu: string; en: string }> = {
   head: { hu: 'Fej, szemek és fülek', en: 'Head, eyes & ears' },
@@ -80,6 +109,7 @@ export function BodyMap({
   painLevel = 0,
   painQualities = [],
   mode = 'diary',
+  simplifiedMode = false,
   onToggleSensation,
   onChangeSelectedBodyParts,
   onChangePainLevel,
@@ -87,6 +117,7 @@ export function BodyMap({
 }: BodyMapProps) {
   const hu = lang === 'hu';
   const [view, setView] = useState<BodyMapView>('front');
+  const [showAllSensations, setShowAllSensations] = useState(false);
   const brushActionRef = useRef<'select' | 'deselect' | null>(null);
   const selectedIdsRef = useRef<string[]>(selectedBodyPartIds);
   selectedIdsRef.current = selectedBodyPartIds;
@@ -213,6 +244,203 @@ export function BodyMap({
   const safePain = Math.max(0, Math.min(10, painLevel ?? 0));
   const painBand = getPainBandMeta(safePain, hu);
   const viewBox = view === 'head' ? '0 0 320 340' : '0 0 280 460';
+
+  function toggleSimplifiedPreset(partIds: readonly string[]) {
+    const allSelected = partIds.every((id) => selectedBodyPartIds.includes(id));
+    const nextIds = allSelected
+      ? selectedBodyPartIds.filter((id) => !partIds.includes(id))
+      : Array.from(new Set([...selectedBodyPartIds, ...partIds]));
+    selectedIdsRef.current = nextIds;
+    commitParts(nextIds);
+  }
+
+  if (simplifiedMode) {
+    const sortedSimplifiedSensations = [...visibleSensations].sort(
+      (a, b) =>
+        Number(selectedSensations.includes(b.id)) -
+          Number(selectedSensations.includes(a.id)) ||
+        Number(b.isRedFlag) - Number(a.isRedFlag),
+    );
+    const displayedSimplifiedSensations = showAllSensations
+      ? sortedSimplifiedSensations
+      : sortedSimplifiedSensations.slice(0, 4);
+
+    return (
+      <div data-no-swipe="true" className="widget-container space-y-4">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold text-ink">
+              {hu
+                ? '1. Válassz legfeljebb 4 fő terület közül:'
+                : '1. Select from 4 main areas:'}
+            </span>
+            {(selectedBodyPartIds.length > 0 || skinSelected) && (
+              <button
+                type="button"
+                onClick={clearAllSegments}
+                className="text-xs font-semibold text-ink-muted hover:text-ink inline-flex items-center gap-1"
+              >
+                <Eraser className="w-3.5 h-3.5" aria-hidden="true" />
+                {hu ? 'Törlés' : 'Clear'}
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 @[420px]:grid-cols-2 gap-2">
+            {SIMPLIFIED_ZONE_PRESETS.map((zone) => {
+              const active = zone.partIds.some((id) =>
+                selectedBodyPartIds.includes(id),
+              );
+              return (
+                <button
+                  key={zone.key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleSimplifiedPreset(zone.partIds)}
+                  className={`p-3 rounded-xl border text-xs font-semibold text-left transition ${
+                    active
+                      ? 'bg-accent text-ink-on-accent border-accent font-bold'
+                      : 'bg-surface-subtle/60 border-border text-ink hover:border-border-strong'
+                  }`}
+                >
+                  {hu ? zone.hu : zone.en}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              aria-pressed={skinSelected}
+              onClick={toggleSkinSystemic}
+              className={`p-3 rounded-xl border text-xs font-semibold text-left transition inline-flex items-center gap-1.5 ${
+                skinSelected
+                  ? 'bg-accent text-ink-on-accent border-accent font-bold'
+                  : 'bg-surface-subtle/60 border-border text-ink hover:border-border-strong'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {hu ? 'Bőr / izzadás / hőérzet' : 'Skin / sweat / heat'}
+            </button>
+          </div>
+        </div>
+
+        {activeSelectedRegions.length > 0 && (
+          <div className="space-y-2 pt-3 border-t border-border">
+            <span className="block text-xs font-bold text-ink">
+              {hu ? '2. Megfigyelt testérzetek:' : '2. Observed sensations:'}
+            </span>
+            <div className="divide-y divide-border border border-border rounded-2xl overflow-hidden bg-surface">
+              {displayedSimplifiedSensations.map((s) => {
+                const isSelected = selectedSensations.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => onToggleSensation(s.id, s.region)}
+                    aria-pressed={isSelected}
+                    className={`w-full text-left p-3 transition flex items-start justify-between gap-3 ${
+                      isSelected
+                        ? s.isRedFlag
+                          ? 'bg-emergency-soft'
+                          : 'bg-accent-soft/70'
+                        : 'hover:bg-surface-subtle/60'
+                    }`}
+                  >
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-ink">
+                          {hu ? s.labelHu : s.labelEn}
+                        </span>
+                        {s.isRedFlag && (
+                          <AlertTriangle
+                            className="w-3.5 h-3.5 text-warning-ink shrink-0"
+                            aria-label={hu ? 'Vörös zászló jel' : 'Red-flag sign'}
+                          />
+                        )}
+                      </div>
+                      <p className="text-xs text-ink-muted">
+                        {hu ? s.hintHu : s.hintEn}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 w-5 h-5 rounded-full border flex items-center justify-center mt-0.5 ${
+                        isSelected
+                          ? s.isRedFlag
+                            ? 'bg-emergency border-emergency text-emergency-ink'
+                            : 'bg-accent border-accent text-ink-on-accent'
+                          : 'border-border-strong text-transparent'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {sortedSimplifiedSensations.length > 4 && (
+              <button
+                type="button"
+                onClick={() => setShowAllSensations((v) => !v)}
+                className="text-xs font-semibold text-secondary hover:underline"
+              >
+                {showAllSensations
+                  ? hu
+                    ? 'Kevesebb mutatása (4)'
+                    : 'Show fewer (4)'
+                  : hu
+                    ? `További tünetek mutatása (${sortedSimplifiedSensations.length})`
+                    : `Show all sensations (${sortedSimplifiedSensations.length})`}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2 pt-3 border-t border-border">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-ink">
+              {hu ? 'Fájdalom erőssége (4 fokozat)' : 'Pain level (4 choices)'}
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${painBand.badgeClass}`}
+            >
+              {painBand.text}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 @[420px]:grid-cols-4 gap-2">
+            {SIMPLIFIED_PAIN_PRESETS.map((p) => {
+              const active =
+                p.level === 0
+                  ? safePain === 0
+                  : p.level === 3
+                    ? safePain >= 1 && safePain <= 3
+                    : p.level === 5
+                      ? safePain >= 4 && safePain <= 6
+                      : safePain >= 7;
+              return (
+                <button
+                  key={p.level}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onChangePainLevel?.(p.level)}
+                  className={`py-2 px-2.5 rounded-xl border text-xs font-semibold transition ${
+                    active
+                      ? p.level >= 7
+                        ? 'bg-emergency border-emergency text-emergency-ink font-bold'
+                        : p.level >= 4
+                          ? 'bg-warning-soft border-warning-border text-warning-ink font-bold'
+                          : 'bg-accent border-accent text-ink-on-accent font-bold'
+                      : 'bg-surface border-border text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {hu ? p.hu : p.en}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-no-swipe="true" className="widget-container">

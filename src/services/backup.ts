@@ -122,7 +122,16 @@ export function validateImportedState(raw: unknown): SeroSafeState | null {
       lang,
       theme,
       reducedMotion: Boolean(rawSettings.reducedMotion),
-      hidePercentages: Boolean(rawSettings.hidePercentages),
+      hidePercentages:
+        rawSettings.hidePercentages === undefined
+          ? baseline.settings.hidePercentages
+          : Boolean(rawSettings.hidePercentages),
+      simplifiedMode: Boolean(rawSettings.simplifiedMode),
+      quietedConsultSignature:
+        typeof rawSettings.quietedConsultSignature === 'string' &&
+        rawSettings.quietedConsultSignature.length > 0
+          ? rawSettings.quietedConsultSignature
+          : undefined,
       desktopFrameMode:
         rawSettings.desktopFrameMode === 'mobile-preview'
           ? 'mobile-preview'
